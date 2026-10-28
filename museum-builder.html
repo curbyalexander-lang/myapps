@@ -1,4 +1,9 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 <title>Museum Builder</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -245,6 +250,8 @@ details.credits .cgrid { display: flex; flex-direction: column; gap: 8px; margin
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
+</head>
+<body>
 <div id="app">
 <div id="stage" aria-label="3D museum gallery. Use the tour buttons to move between exhibits."></div>
 
@@ -1652,11 +1659,11 @@ details.credits .cgrid { display: flex; flex-direction: column; gap: 8px; margin
         if (!["unavailable", "not_granted", "capability_disabled", "capability_removed", "extension_not_enabled"].includes(c)) throw e;
       }
     }
-    if (IS_FRAMED) return "unavailable";
     const url = URL.createObjectURL(blob), a = document.createElement("a");
     a.href = url; a.download = name; document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
-    return "link";
+    // inside Claude's viewer a plain download link does nothing; anywhere else the browser handles it
+    return (IS_FRAMED && window.claude) ? "unavailable" : "link";
   }
   const NO_DOWNLOAD = "This view of the page can't save files. Open it at claude.ai in a web browser such as Chrome, Edge, Safari or Firefox, signed in to Claude, and try again.";
   async function downloadMuseum() {
@@ -1903,4 +1910,5 @@ details.credits .cgrid { display: flex; flex-direction: column; gap: 8px; margin
 })();
 </script>
 
-</body></html>
+</body>
+</html>
