@@ -1634,15 +1634,42 @@ details.credits .cgrid { display: flex; flex-direction: column; gap: 8px; margin
       "<script src=\"" + THREE_URL + "\"><\/script>" +
       "<script>" + CODE + "<\/script></body></html>";
   }
+  // Save a file: the viewer's download capability first, then an ordinary browser download where the page is allowed one.
+  async function getDownloads() {
+    if (downloads) return downloads;
+    if (window.claude && typeof window.claude.use === "function") { try { downloads = await window.claude.use("downloads"); } catch (_) {} }
+    return downloads;
+  }
+  const IS_FRAMED = (() => { try { return window.self !== window.top; } catch (_) { return true; } })();
+  async function saveHtml(name, html) {
+    const blob = new Blob([html], { type: "text/html" });
+    const d = await getDownloads();
+    if (d) {
+      try { await d.save({ filename: name, data: blob }); return "saved"; }
+      catch (e) {
+        const c = e && e.code;
+        if (c === "declined") return "declined";
+        if (!["unavailable", "not_granted", "capability_disabled", "capability_removed", "extension_not_enabled"].includes(c)) throw e;
+      }
+    }
+    if (IS_FRAMED) return "unavailable";
+    const url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = name; document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return "link";
+  }
+  const NO_DOWNLOAD = "This view of the page can't save files. Open it at claude.ai in a web browser such as Chrome, Edge, Safari or Firefox, signed in to Claude, and try again.";
   async function downloadMuseum() {
     if (!exhibits.length) { setShare("Add at least one image before you download.", true); return; }
-    if (!downloads) { setShare("Downloading isn't available in this view of the page. Open the builder link directly in Chrome, Edge, Safari or Firefox and try again.", true); return; }
     const html = buildExport(), name = slug(museum.name) + ".html";
     const mb = (new Blob([html]).size / 1048576).toFixed(1);
     setShare("Preparing your file…");
     try {
-      await downloads.save({ filename: name, data: new Blob([html], { type: "text/html" }) });
-      setShare(`Downloaded ${name} (${mb} MB). Open it in any web browser to walk through your museum.`);
+      const r = await saveHtml(name, html);
+      if (r === "saved") setShare(`Downloaded ${name} (${mb} MB). Open it in any web browser to walk through your museum.`);
+      else if (r === "link") setShare(`Your browser is saving ${name} (${mb} MB). Look in your Downloads folder.`);
+      else if (r === "declined") setShare("Download canceled.");
+      else setShare(NO_DOWNLOAD, true);
     } catch (e) {
       const code = e && e.code;
       if (code === "declined") setShare("Download canceled.");
@@ -1802,12 +1829,14 @@ details.credits .cgrid { display: flex; flex-direction: column; gap: 8px; margin
   }
   async function downloadHall() {
     if (!hallMuseums.length) return;
-    if (!downloads) { setHallStatus("Downloading isn't available in this view of the page. Open the exhibition hall link directly in a web browser and try again.", true); return; }
     const html = buildHallExport(), name = slug(hallTitle) + ".html", mb = (new Blob([html]).size / 1048576).toFixed(1);
     setHallStatus("Preparing the exhibition file…");
     try {
-      await downloads.save({ filename: name, data: new Blob([html], { type: "text/html" }) });
-      setHallStatus(`Downloaded ${name} (${mb} MB). Share it with the class; it opens to this lobby.`);
+      const r = await saveHtml(name, html);
+      if (r === "saved") setHallStatus(`Downloaded ${name} (${mb} MB). Share it with the class; it opens to this lobby.`);
+      else if (r === "link") setHallStatus(`Your browser is saving ${name} (${mb} MB). Look in your Downloads folder.`);
+      else if (r === "declined") setHallStatus("Download canceled.");
+      else setHallStatus(NO_DOWNLOAD, true);
     } catch (e) {
       const code = e && e.code;
       if (code === "declined") setHallStatus("Download canceled.");
@@ -1843,7 +1872,7 @@ details.credits .cgrid { display: flex; flex-direction: column; gap: 8px; margin
         delete cb.dataset.armed; cb.textContent = "Remove all"; cb.classList.remove("warn");
         hallMuseums.forEach(m => hallDel(m.id)); hallMuseums = []; hallSaveMeta(); renderLobby(); setHallStatus("Removed every museum.");
       };
-      if (window.claude && window.claude.use) { try { downloads = await window.claude.use("downloads"); } catch (_) {} }
+      getDownloads();
     }
     showLobby();
   }
@@ -1867,8 +1896,8 @@ details.credits .cgrid { display: flex; flex-direction: column; gap: 8px; margin
     }
     $("curateBtn").hidden = false; $("dlTop").hidden = false;
     rebuildAll(); renderer.setAnimationLoop(frame);
+    getDownloads();
     await loadDraft();
-    if (window.claude && window.claude.use) { try { downloads = await window.claude.use("downloads"); } catch (_) {} }
   };
   (document.fonts && document.fonts.ready ? Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]) : Promise.resolve()).then(boot);
 })();
