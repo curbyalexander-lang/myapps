@@ -1,0 +1,1878 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Class Exhibition Hall</title>
+<meta name="museum-mode" content="hall">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=Public+Sans:wght@400;500;600&display=swap">
+<style id="hallStyle">
+/* Layout: full-bleed WebGL gallery hall; HUD floats on top (title top-left, tour bar bottom, curator drawer right). */
+:root {
+  --paper: #ffffff;
+  --wash: #eef1f2;
+  --ink: #1a1d20;
+  --muted: #5a6268;
+  --line: #d5dadd;
+  --accent: #2c6656;
+  --accent-ink: #ffffff;
+  --danger: #a3372b;
+  --scrim: rgba(18, 22, 24, 0.62);
+  --glass: rgba(255, 255, 255, 0.86);
+  --display: "Bodoni Moda", "Didot", "Bodoni 72", Georgia, serif;
+  --body: "Public Sans", "Helvetica Neue", Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #17191b; --wash: #202427; --ink: #e8ecee; --muted: #9aa3a9; --line: #343a3e;
+    --accent: #6ebfa6; --accent-ink: #0e1a16; --danger: #e5826f; --scrim: rgba(0,0,0,0.72);
+    --glass: rgba(23, 25, 27, 0.86); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #17191b; --wash: #202427; --ink: #e8ecee; --muted: #9aa3a9; --line: #343a3e;
+  --accent: #6ebfa6; --accent-ink: #0e1a16; --danger: #e5826f; --scrim: rgba(0,0,0,0.72);
+  --glass: rgba(23, 25, 27, 0.86); color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  background: var(--wash); color: var(--ink); font-family: var(--body); font-size: 15px;
+  overflow: hidden; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+#stage { position: fixed; inset: 0; touch-action: none; cursor: grab; }
+#stage:active { cursor: grabbing; }
+#stage canvas { display: block; width: 100%; height: 100%; }
+
+button { font: inherit; color: inherit; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--paper);
+  border-radius: 999px; padding: 8px 14px; font-weight: 500; cursor: pointer; white-space: nowrap;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.ghost { background: transparent; }
+.btn:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn[disabled] { opacity: .45; cursor: default; }
+
+/* top-left nameplate */
+#plate {
+  position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px));
+  max-width: min(440px, calc(100% - 32px)); background: var(--glass); backdrop-filter: blur(8px);
+  border: 1px solid var(--line); border-radius: 4px; padding: 12px 16px; pointer-events: none;
+}
+#plate .eyebrow { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+#plate h1 { font-family: var(--display); font-weight: 700; font-size: clamp(22px, 3.2vw, 30px); line-height: 1.1; margin: 4px 0 2px; text-wrap: balance; }
+#plate p { margin: 0; color: var(--muted); font-size: 13px; }
+
+#topright {
+  position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;
+}
+
+/* bottom tour bar */
+#tour {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  width: min(720px, calc(100% - 32px)); background: var(--glass); backdrop-filter: blur(8px);
+  border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px;
+  display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center;
+}
+#tour .now { min-width: 0; cursor: pointer; }
+#tour .count { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-variant-numeric: tabular-nums; }
+#tour .ttl { font-family: var(--display); font-weight: 500; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#tour .hint { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.round { width: 40px; height: 40px; padding: 0; justify-content: center; border-radius: 50%; }
+
+#walkpad {
+  position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 8px;
+}
+@media (hover: hover) and (pointer: fine) { #walkpad { display: none; } }
+#walkpad .btn { width: 48px; height: 48px; justify-content: center; padding: 0; border-radius: 50%; background: var(--glass); }
+
+/* detail overlay */
+#detail { position: fixed; inset: 0; background: var(--scrim); display: grid; place-items: center; z-index: 30;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+#detail .card { background: var(--paper); border-radius: 6px; max-width: 980px; width: 100%; max-height: 100%; overflow: auto;
+  display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+#detail .imgwrap { background: #111; display: grid; place-items: center; min-height: 240px; }
+#detail img { max-height: 76vh; width: auto; max-width: 100%; display: block; }
+#detail .text { padding: 22px 22px 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+#detail .text .count { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-variant-numeric: tabular-nums; }
+#detail h2 { font-family: var(--display); font-weight: 700; font-size: 26px; line-height: 1.15; margin: 0; text-wrap: balance; }
+#detail .cap { margin: 0; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+#detail .row { display: flex; gap: 8px; margin-top: auto; flex-wrap: wrap; }
+@media (max-width: 720px) { #detail .card { grid-template-columns: 1fr; } #detail img { max-height: 46vh; } }
+
+/* curator drawer */
+#curator { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 100%); background: var(--paper); z-index: 20;
+  border-left: 1px solid var(--line); display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); padding-right: env(safe-area-inset-right, 0px); }
+#curator header { padding: 16px 18px 12px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+#curator header h2 { font-family: var(--display); font-size: 22px; margin: 0; }
+#curator .body { overflow-y: auto; padding: 16px 18px 24px; display: flex; flex-direction: column; gap: 18px; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+input[type=text], textarea { font: inherit; color: var(--ink); background: var(--wash); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; width: 100%; box-sizing: border-box; }
+textarea { resize: vertical; min-height: 64px; line-height: 1.45; }
+.addbox { border: 1.5px dashed var(--line); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.addbox.over { border-color: var(--accent); background: var(--wash); }
+.addbox p { margin: 0; font-size: 13px; color: var(--muted); }
+.status { font-size: 13px; color: var(--muted); min-height: 1.2em; }
+.status.err { color: var(--danger); }
+.item { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 12px; padding-top: 14px; border-top: 1px solid var(--line); }
+.item .thumb { width: 76px; height: 76px; object-fit: cover; border-radius: 3px; background: var(--wash); }
+.item .num { font-size: 11px; color: var(--muted); letter-spacing: .1em; font-variant-numeric: tabular-nums; margin-top: 6px; text-align: center; }
+.item .fields { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.item .tools { display: flex; gap: 6px; flex-wrap: wrap; }
+.item .tools .btn { padding: 5px 10px; font-size: 13px; }
+.btn.warn { color: var(--danger); border-color: var(--danger); }
+.note { font-size: 13px; color: var(--muted); line-height: 1.5; margin: 0; background: var(--wash); border-radius: 4px; padding: 10px 12px; }
+.badge { display: inline-block; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); vertical-align: middle; margin-left: 6px; }
+.tabs { display: flex; gap: 18px; padding: 0 18px; border-bottom: 1px solid var(--line); }
+.tab { background: none; border: 0; padding: 12px 0 10px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+fieldset.group { border: 0; padding: 0; margin: 0; min-width: 0; }
+fieldset.group legend { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 0; margin-bottom: 10px; }
+.floors { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.floor-opt { border: 1px solid var(--line); background: var(--paper); color: var(--ink); border-radius: 4px; padding: 4px 4px 6px; cursor: pointer; display: flex; flex-direction: column; gap: 5px; font-size: 12px; text-align: left; }
+.floor-opt img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 2px; display: block; }
+.floor-opt[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.floor-opt:focus-visible, .chip:focus-visible, .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chips { display: flex; flex-wrap: wrap; gap: 10px 6px; }
+.chip { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 54px; background: none; border: 0; padding: 0; cursor: pointer; font-size: 11px; color: var(--muted); text-align: center; line-height: 1.2; }
+.chip .sw { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line); }
+.chip[aria-pressed="true"], .chip.custom.on { color: var(--ink); font-weight: 600; }
+.chip[aria-pressed="true"] .sw, .chip.custom.on input { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chip.custom input { width: 32px; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: none; cursor: pointer; overflow: hidden; }
+.chip.custom input::-webkit-color-swatch-wrapper { padding: 0; }
+.chip.custom input::-webkit-color-swatch { border: 0; border-radius: 50%; }
+.chip.custom input::-moz-color-swatch { border: 0; border-radius: 50%; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 2px; }
+.seg button { border: 0; background: none; padding: 6px 14px; border-radius: 999px; cursor: pointer; font-weight: 500; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.checks { display: flex; flex-direction: column; gap: 10px; }
+.check { display: flex; gap: 10px; align-items: center; cursor: pointer; }
+.check input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+.resetrow { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding-top: 14px; border-top: 1px solid var(--line); }
+.resetrow span { font-size: 12px; color: var(--muted); }
+.share-step { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.share-step h3 { font-family: var(--display); font-weight: 700; font-size: 19px; margin: 0; }
+.share-step p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.note.warnnote { color: var(--danger); }
+#plate .by { margin-top: 4px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.hint { font-size: 12px; color: var(--muted); line-height: 1.4; }
+.galrow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; padding-top: 14px; margin-top: 6px; border-top: 2px solid var(--ink); }
+.gallab { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; color: var(--accent); white-space: nowrap; }
+.galrow input { font-family: var(--display); font-weight: 700; font-size: 16px; }
+.galrow .btn { padding: 5px 10px; font-size: 13px; }
+details.credits { border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px; }
+details.credits summary { cursor: pointer; font-size: 13px; font-weight: 600; padding: 2px 0; }
+details.credits .cgrid { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 4px; }
+.need { font-weight: 500; font-size: 11px; color: var(--danger); }
+.okc { font-weight: 500; font-size: 11px; color: var(--accent); }
+#detail .meta { margin: 0; font-style: italic; color: var(--muted); }
+#detail .credit { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-wrap: wrap; gap: 4px 10px; overflow-wrap: anywhere; }
+#detail .credit a, #tvBody a { color: var(--accent); }
+#detail details.desc summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); }
+#detail details.desc p { margin: 6px 0 0; line-height: 1.55; }
+#detail .card.noimg { grid-template-columns: 1fr; max-width: 680px; }
+#tour { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+.btn.round svg { width: 18px; height: 18px; display: block; }
+.btn.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+#bigBtn[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+#textview { position: fixed; inset: 0; z-index: 35; background: var(--scrim); display: grid; place-items: center;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.tvcard { background: var(--paper); border-radius: 6px; width: min(760px, 100%); max-height: 100%; overflow: auto; }
+.tvcard header { position: sticky; top: 0; background: var(--paper); display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 22px; border-bottom: 1px solid var(--line); }
+.tvcard header h2 { font-family: var(--display); margin: 0; font-size: 24px; text-wrap: balance; }
+#tvBody { padding: 8px 22px 28px; line-height: 1.6; }
+#tvBody h3 { font-family: var(--display); font-size: 21px; margin: 22px 0 6px; padding-top: 14px; border-top: 2px solid var(--ink); }
+#tvBody article { padding: 14px 0; border-bottom: 1px solid var(--line); }
+#tvBody h4 { margin: 0 0 4px; font-size: 17px; }
+#tvBody p { margin: 4px 0; max-width: 65ch; overflow-wrap: anywhere; }
+#tvBody .tvsub { font-size: 16px; }
+#tvBody .tvmeta { font-style: italic; color: var(--muted); }
+#tvBody .tvsrc { font-size: 13px; color: var(--muted); }
+#tvBody .tvtools { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+#tvBody .tvtools .btn { padding: 5px 12px; font-size: 13px; }
+:root.big body { font-size: 17px; }
+:root.big #plate h1 { font-size: 34px; }
+:root.big #plate p { font-size: 15px; }
+:root.big #tour .ttl { font-size: 21px; }
+:root.big #tour .count, :root.big #tour .hint { font-size: 14px; }
+:root.big #detail h2 { font-size: 32px; }
+:root.big #detail .cap, :root.big #detail details.desc p { font-size: 19px; line-height: 1.65; }
+:root.big #detail .meta, :root.big #detail .credit { font-size: 16px; }
+:root.big #tvBody { font-size: 19px; }
+:root.big #tvBody h4 { font-size: 21px; }
+:root.big #tvBody .tvsrc { font-size: 16px; }
+@media (max-width: 640px) {
+  #topright { top: auto; right: auto; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(92px + env(safe-area-inset-bottom, 0px)); justify-content: flex-start; max-width: calc(100% - 96px); }
+  #topright .btn { padding: 6px 11px; font-size: 13px; }
+}
+#lobby { position: fixed; inset: 0; z-index: 40; background: var(--wash); overflow-y: auto;
+  padding: calc(24px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(32px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+#lobby.over { outline: 3px dashed var(--accent); outline-offset: -12px; }
+.lobby-inner { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+.lobby-head { display: flex; flex-direction: column; gap: 6px; padding-bottom: 18px; border-bottom: 2px solid var(--ink); }
+.lobby-head .eyebrow { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+.lobby-head h1, #lobbyTitleIn { font-family: var(--display); font-weight: 700; font-size: clamp(30px, 5vw, 52px); line-height: 1.05; margin: 0; text-wrap: balance; }
+#lobbyTitleIn { color: var(--ink); background: transparent; border: 1px dashed var(--line); border-radius: 4px; padding: 2px 8px; width: 100%; box-sizing: border-box; }
+#lobbyTitleIn:hover { border-color: var(--muted); }
+.lobby-head p { margin: 0; color: var(--muted); }
+.lobby-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.doors { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 28px 22px; }
+.doorwrap { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.door { display: flex; flex-direction: column; gap: 4px; text-align: left; background: none; border: 0; padding: 0; cursor: pointer; color: var(--ink); min-width: 0; }
+.door .arch { aspect-ratio: 3 / 4; border-radius: 999px 999px 3px 3px; overflow: hidden; background: var(--door-wall, #f1efe9);
+  border: 8px solid var(--door-frame, #2a2724); box-shadow: inset 0 0 0 6px var(--door-wall, #f1efe9); margin-bottom: 8px; transition: transform .18s ease; }
+.door .arch img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.door:hover .arch, .door:focus-visible .arch { transform: translateY(-4px); }
+.door:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+.door .dname { font-family: var(--display); font-weight: 700; font-size: 19px; line-height: 1.2; overflow-wrap: anywhere; }
+.door .dby { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.door .dcount { font-size: 13px; color: var(--muted); }
+.doortools { display: flex; gap: 6px; }
+.doortools .btn { padding: 4px 10px; font-size: 13px; }
+.lobby-empty { border: 1.5px dashed var(--line); border-radius: 6px; padding: 22px; display: flex; flex-direction: column; gap: 8px; max-width: 70ch; }
+.lobby-empty p { margin: 0; line-height: 1.55; color: var(--muted); }
+.lobby-empty strong { color: var(--ink); }
+@media (max-width: 560px) { .doors { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 14px; } .door .dname { font-size: 16px; } }
+:root.big .door .dname { font-size: 23px; }
+:root.big .door .dcount { font-size: 16px; }
+@media (max-width: 560px) { #tour .hint { display: none; } #plate p { display: none; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div id="app">
+<div id="stage" aria-label="3D museum gallery. Use the tour buttons to move between exhibits."></div>
+
+<div id="plate">
+  <div class="eyebrow" id="plateEyebrow">Now showing</div>
+  <h1 id="museumName">Virtual Museum</h1>
+  <p id="museumSub">A walk-through gallery of images and captions</p>
+  <p id="museumBy" class="by" hidden></p>
+</div>
+
+<div id="topright">
+  <button class="btn" id="lobbyBtn" hidden>‹ Lobby</button>
+  <button class="btn" id="textViewBtn" hidden>Text view</button>
+  <button class="btn" id="bigBtn" aria-pressed="false">Larger text</button>
+  <button class="btn" id="vrBtn" hidden>Enter VR</button>
+  <button class="btn" id="dlTop" hidden>Download</button>
+  <button class="btn primary" id="curateBtn" hidden>Build your museum</button>
+</div>
+
+<div id="walkpad" aria-hidden="true">
+  <button class="btn" id="fwd" aria-label="Walk forward">▲</button>
+  <button class="btn" id="back" aria-label="Walk back">▼</button>
+</div>
+
+<div id="tour">
+  <button class="btn round" id="prev" aria-label="Previous exhibit">‹</button>
+  <div class="now" id="nowBox" role="button" tabindex="0" aria-label="Open exhibit details">
+    <div class="count" id="tourCount">Entrance</div>
+    <div class="ttl" id="tourTitle">Use the arrows to tour the hall</div>
+    <div class="hint">Drag to look · W A S D or arrow keys to walk · click a picture to read its label</div>
+  </div>
+  <button class="btn round" id="speakBtn" aria-label="Read this label aloud" data-text="icon" data-label="Read this label aloud" aria-pressed="false" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg></button>
+  <button class="btn round" id="next" aria-label="Next exhibit">›</button>
+</div>
+
+<div id="detail" hidden role="dialog" aria-modal="true" aria-labelledby="dTitle">
+  <div class="card" id="dCard">
+    <div class="imgwrap" id="dImgWrap"><img id="dImg" alt=""></div>
+    <div class="text">
+      <div class="count" id="dCount"></div>
+      <h2 id="dTitle"></h2>
+      <p class="meta" id="dMeta" hidden></p>
+      <p class="cap" id="dCap"></p>
+      <details class="desc" id="dDescWrap" hidden><summary>Image description</summary><p id="dDesc"></p></details>
+      <div class="credit" id="dCredit" hidden><span id="dSource"></span><a id="dLink" target="_blank" rel="noopener noreferrer" hidden>View source</a></div>
+      <div class="row">
+        <button class="btn" id="dPrev">‹ Previous</button>
+        <button class="btn" id="dNext">Next ›</button>
+        <button class="btn" id="dSpeak" aria-pressed="false" hidden>Read aloud</button>
+        <button class="btn primary" id="dClose">Back to the hall</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="textview" hidden role="dialog" aria-modal="true" aria-labelledby="tvTitle">
+  <div class="tvcard">
+    <header><h2 id="tvTitle">Museum</h2><button class="btn" id="tvClose">Close</button></header>
+    <div id="tvBody"></div>
+  </div>
+</div>
+
+<aside id="curator" hidden aria-label="Curator panel">
+  <header>
+    <h2>Curate</h2>
+    <button class="btn ghost" id="closeCurator">Done</button>
+  </header>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tabEx" aria-selected="true" aria-controls="paneEx">Exhibits</button>
+    <button class="tab" role="tab" id="tabDesign" aria-selected="false" aria-controls="paneDesign">Look &amp; feel</button>
+    <button class="tab" role="tab" id="tabShare" aria-selected="false" aria-controls="paneShare">Save &amp; share</button>
+  </div>
+  <div class="body" id="paneEx" role="tabpanel" aria-labelledby="tabEx">
+    <div class="field">
+      <label for="stmtIn">Curator’s statement</label>
+      <textarea id="stmtIn" rows="5" maxlength="1500" placeholder="What is this museum about? State its argument or the question it explores."></textarea>
+      <span class="hint">Shown on a panel at the entrance, and as the first stop on the tour.</span>
+    </div>
+    <div class="addbox" id="dropZone">
+      <button class="btn primary" id="addBtn">Add images</button>
+      <input type="file" id="fileIn" accept="image/*" multiple hidden>
+      <p>Choose files or drop them here. Each image becomes a framed exhibit with a wall label. Large photos are made smaller so your museum file stays a manageable size.</p>
+      <div class="status" id="upStatus" aria-live="polite"></div>
+    </div>
+    <p class="note" id="exampleNote" hidden>The hall is showing four example pieces. They disappear as soon as you add your first image. Give each piece a credit and an image description, use “Start a gallery here” to group pieces into sections, and when you finish, open Save &amp; share to download your museum.</p>
+    <div id="itemList"></div>
+  </div>
+  <div class="body" id="paneDesign" role="tabpanel" aria-labelledby="tabDesign" hidden>
+    <div class="field">
+      <label for="nameIn">Museum name</label>
+      <input type="text" id="nameIn" maxlength="80">
+    </div>
+    <div class="field">
+      <label for="subIn">Subtitle</label>
+      <input type="text" id="subIn" maxlength="140">
+    </div>
+    <div class="field">
+      <label for="byIn">Curated by</label>
+      <input type="text" id="byIn" maxlength="80" placeholder="Your name">
+    </div>
+    <fieldset class="group">
+      <legend>Floor</legend>
+      <div class="floors" id="floorOpts"></div>
+    </fieldset>
+    <fieldset class="group">
+      <legend>Wall color</legend>
+      <div class="chips" id="wallOpts"></div>
+    </fieldset>
+    <fieldset class="group">
+      <legend>Frame color</legend>
+      <div class="chips" id="frameOpts"></div>
+    </fieldset>
+    <fieldset class="group">
+      <legend>Seating</legend>
+      <div class="seg" id="seatOpts"></div>
+    </fieldset>
+    <fieldset class="group">
+      <legend>Objects in the hall</legend>
+      <div class="checks" id="objOpts"></div>
+    </fieldset>
+    <div class="resetrow">
+      <button class="btn" id="resetLook">Restore the original look</button>
+      <span>Resets floor, colors and objects. The name stays.</span>
+    </div>
+  </div>
+  <div class="body" id="paneShare" role="tabpanel" aria-labelledby="tabShare" hidden>
+    <p class="note" id="draftNote">This browser keeps your work while you build, but only on this device. Download your museum to turn it in or share it.</p>
+    <section class="share-step">
+      <h3>Download your museum</h3>
+      <p>Saves one HTML file with every image, caption and design choice inside. Turn it in or share it with classmates. Anyone can open it in a web browser to walk through it while online.</p>
+      <button class="btn primary" id="dlBtn">Download museum</button>
+    </section>
+    <section class="share-step">
+      <h3>Keep editing a saved museum</h3>
+      <p>Open a museum file you downloaded earlier, make your changes, then download it again.</p>
+      <button class="btn" id="openBtn">Open a saved museum</button>
+      <input type="file" id="openIn" accept=".html,.htm,text/html" hidden>
+    </section>
+    <section class="share-step">
+      <h3>Start over</h3>
+      <p>Clears this museum from the builder. Download it first if you want to keep it.</p>
+      <button class="btn" id="newBtn">Start a new museum</button>
+    </section>
+    <div class="status" id="shareStatus" aria-live="polite"></div>
+  </div>
+</aside>
+<div id="lobby" hidden>
+  <div class="lobby-inner">
+    <header class="lobby-head">
+      <div class="eyebrow">Class exhibition</div>
+      <h1 id="lobbyTitle">Class Exhibition</h1>
+      <input type="text" id="lobbyTitleIn" maxlength="100" aria-label="Exhibition title" hidden>
+      <p id="lobbyCount"></p>
+    </header>
+    <div class="lobby-tools" id="lobbyTools" hidden>
+      <button class="btn primary" id="addMuseums">Add museum files</button>
+      <input type="file" id="museumFiles" accept=".html,.htm,text/html" multiple hidden>
+      <button class="btn" id="dlHall">Download exhibition</button>
+      <button class="btn" id="clearHall" hidden>Remove all</button>
+    </div>
+    <div class="status" id="hallStatus" aria-live="polite"></div>
+    <div class="doors" id="doors"></div>
+    <div class="lobby-empty" id="lobbyEmpty">
+      <p><strong>Drop your students’ museum files anywhere on this page</strong>, or choose Add museum files. Each file becomes a door in this lobby.</p>
+      <p>The collection stays in this browser, so it’s here when you come back. Download exhibition makes one file with every museum inside to share with the class.</p>
+    </div>
+  </div>
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script id="hallCode">
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const HALL_DATA = document.getElementById("exhibitionData");
+  const HALL = !!HALL_DATA || !!document.querySelector('meta[name="museum-mode"][content="hall"]');
+  const HALL_EDIT = HALL && !HALL_DATA;
+  const VIEW = HALL || !!document.getElementById("museumData");
+  const CODE = document.currentScript ? document.currentScript.textContent : "";
+  const PRISTINE = $("app").outerHTML;
+  const STYLE = $("hallStyle").textContent;
+  const THREE_URL = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+  const FONT_LINKS = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=Public+Sans:wght@400;500;600&display=swap">';
+  const BASE_CSS = "body{margin:0}img{max-width:100%}";
+
+  // ---------- state ----------
+  let exhibits = [];          // {id, title, caption, assetId, url, order, w, h, example?}
+  let museum = { name: "My Museum", subtitle: "A walk-through gallery of images and captions", by: "", statement: "" };
+  const DEFAULT_SUB = "A walk-through gallery of images and captions";
+  const DEFAULT_DESIGN = { floor: "oak", wall: "#f1efe9", frame: "#2a2724", seating: "benches", plants: true, sculptures: false, rug: false, lights: false };
+  let design = { ...DEFAULT_DESIGN };
+  let bigText = false;
+  try { bigText = localStorage.getItem("museum-large-text") === "1"; } catch (_) {}
+  let downloads = null;
+  let tourIndex = -1;
+
+  // ---------- examples (shown only while the hall is empty) ----------
+  function makeExample(i) {
+    const c = document.createElement("canvas");
+    const W = [1600, 1200, 1400, 1200][i], H = [1000, 1500, 1050, 1200][i];
+    c.width = W; c.height = H;
+    const g = c.getContext("2d");
+    if (i === 0) {
+      const sky = g.createLinearGradient(0, 0, 0, H);
+      sky.addColorStop(0, "#c9d6dc"); sky.addColorStop(0.62, "#e9d9bd"); sky.addColorStop(0.63, "#7c8b6a"); sky.addColorStop(1, "#4a5640");
+      g.fillStyle = sky; g.fillRect(0, 0, W, H);
+      g.fillStyle = "#5e6d55";
+      g.beginPath(); g.moveTo(0, H * .63);
+      for (let x = 0; x <= W; x += 40) g.lineTo(x, H * .6 - Math.sin(x / 210) * 60 - Math.sin(x / 77) * 14);
+      g.lineTo(W, H * .63); g.fill();
+      g.fillStyle = "#f3e6c8"; g.beginPath(); g.arc(W * .72, H * .3, 70, 0, 7); g.fill();
+    } else if (i === 1) {
+      g.fillStyle = "#efe9df"; g.fillRect(0, 0, W, H);
+      const cols = ["#b5452f", "#2c4f7c", "#e2b33c", "#1f1f1f"];
+      [[60,60,620,700],[720,60,420,360],[720,460,420,300],[60,800,380,640],[480,800,660,640]].forEach((r, k) => {
+        g.fillStyle = k === 2 ? "#efe9df" : cols[k % 4]; g.fillRect(...r);
+      });
+      g.strokeStyle = "#1f1f1f"; g.lineWidth = 22; g.strokeRect(60, 60, W - 120, H - 120);
+      g.beginPath(); g.moveTo(700, 60); g.lineTo(700, 780); g.moveTo(60, 780); g.lineTo(W - 60, 780); g.moveTo(460, 780); g.lineTo(460, H - 60); g.stroke();
+    } else if (i === 2) {
+      g.fillStyle = "#f2efe6"; g.fillRect(0, 0, W, H);
+      g.strokeStyle = "#7a5c3b"; g.lineWidth = 2;
+      for (let r = 1; r < 22; r++) {
+        g.beginPath();
+        for (let a = 0; a <= 6.3; a += 0.05) {
+          const rr = r * 26 + Math.sin(a * 3 + r * .4) * 18 + Math.cos(a * 5) * 8;
+          const x = W * .45 + Math.cos(a) * rr * 1.3, y = H * .5 + Math.sin(a) * rr;
+          a === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
+        }
+        g.closePath(); g.globalAlpha = r % 5 === 0 ? 1 : .5; g.stroke();
+      }
+      g.globalAlpha = 1; g.fillStyle = "#2c6656"; g.font = "600 34px 'Public Sans', Arial"; g.fillText("CONTOUR INTERVAL 20 FT", 60, H - 60);
+    } else {
+      g.fillStyle = "#1d2a33"; g.fillRect(0, 0, W, H);
+      for (let k = 0; k < 9; k++) {
+        g.beginPath(); g.arc(W / 2, H / 2, 520 - k * 56, 0, 7);
+        g.fillStyle = k % 2 ? "#d9c08a" : ["#264653", "#2a9d8f", "#e76f51", "#f4a261"][k % 4]; g.fill();
+      }
+    }
+    return c;
+  }
+  const EXAMPLES = [
+    { title: "Horizon Study", caption: "Example exhibit. Replace it with your own image: open Curate, choose Add images, then write a title and caption for the wall label." },
+    { title: "Composition in Primaries", caption: "Example exhibit. Captions can run several sentences. The wall label shows the opening lines, and clicking the picture shows the full text." },
+    { title: "Topographic Fragment", caption: "Example exhibit. Maps, primary sources, student work, and photographs all hang well here." },
+    { title: "Concentric Field", caption: "Example exhibit. Reorder pieces with the arrows in Curate to set the path visitors walk." },
+  ].map((e, i) => ({ ...e, id: "example-" + i, example: true, canvas: makeExample(i) }));
+
+  // ---------- three.js scene ----------
+  const stage = $("stage");
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.xr.enabled = true;
+  stage.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color("#d9d6cf");
+  scene.fog = new THREE.Fog("#d9d6cf", 18, 70);
+  const camera = new THREE.PerspectiveCamera(62, 1, 0.05, 200);
+  const rig = new THREE.Group(); rig.add(camera); scene.add(rig);
+  scene.add(new THREE.HemisphereLight("#ffffff", "#8a8170", 0.85));
+  const sun = new THREE.DirectionalLight("#fff6e8", 0.35); sun.position.set(2, 6, 3); scene.add(sun);
+
+  const HALF_W = 4, WALL_H = 4.6, SPACING = 5.2;
+  let hallLen = 20;
+  let shell = null, hang = null;
+  const texCache = new Map();
+
+  function canvasTex(c) { const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = 4; return t; }
+  // ---------- floors ----------
+  function cv(w, h) { const c = document.createElement("canvas"); c.width = w; c.height = h || w; return c; }
+  const cl = (v) => Math.max(0, Math.min(255, Math.round(v)));
+  function planks(r, g, b) {
+    const c = cv(512), x = c.getContext("2d");
+    x.fillStyle = `rgb(${cl(r * .55)},${cl(g * .55)},${cl(b * .55)})`; x.fillRect(0, 0, 512, 512);
+    for (let y = 0; y < 512; y += 64) {
+      const off = (y / 64) % 2 ? 128 : 0;
+      for (let px = -256; px < 512; px += 256) {
+        const v = (Math.random() - .5) * 34;
+        x.fillStyle = `rgb(${cl(r + v)},${cl(g + v)},${cl(b + v * .8)})`;
+        x.fillRect(px + off + 1, y + 1, 254, 62);
+        x.strokeStyle = "rgba(40,24,10,.16)"; x.lineWidth = 1;
+        for (let k = 0; k < 6; k++) { x.beginPath(); const yy = y + 6 + Math.random() * 52; x.moveTo(px + off, yy); x.bezierCurveTo(px + off + 80, yy + 4, px + off + 170, yy - 4, px + off + 256, yy); x.stroke(); }
+      }
+    }
+    return c;
+  }
+  function veins(x, x0, y0, w, h, n, color) {
+    x.strokeStyle = color;
+    for (let k = 0; k < n; k++) {
+      x.lineWidth = .6 + Math.random() * 1.6; x.beginPath();
+      let px = x0 + Math.random() * w, py = y0; x.moveTo(px, py);
+      while (py < y0 + h) { px += (Math.random() - .5) * 40; py += 10 + Math.random() * 25; x.lineTo(px, py); }
+      x.stroke();
+    }
+  }
+  function marble() {
+    const c = cv(512), x = c.getContext("2d");
+    for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
+      const v = Math.random() * 10; x.fillStyle = `rgb(${cl(232 + v)},${cl(230 + v)},${cl(225 + v)})`;
+      x.fillRect(i * 256, j * 256, 256, 256);
+      x.save(); x.beginPath(); x.rect(i * 256, j * 256, 256, 256); x.clip();
+      veins(x, i * 256 - 40, j * 256, 336, 256, 5, "rgba(120,118,112,.35)"); x.restore();
+    }
+    x.strokeStyle = "rgba(150,145,138,.9)"; x.lineWidth = 2;
+    for (let k = 0; k <= 512; k += 256) { x.beginPath(); x.moveTo(k, 0); x.lineTo(k, 512); x.moveTo(0, k); x.lineTo(512, k); x.stroke(); }
+    return c;
+  }
+  function checker() {
+    const c = cv(512), x = c.getContext("2d");
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+      const dark = (i + j) % 2 === 0;
+      x.fillStyle = dark ? "#202224" : "#ecebe6"; x.fillRect(i * 128, j * 128, 128, 128);
+      x.save(); x.beginPath(); x.rect(i * 128, j * 128, 128, 128); x.clip();
+      veins(x, i * 128, j * 128, 128, 128, 2, dark ? "rgba(255,255,255,.09)" : "rgba(0,0,0,.08)"); x.restore();
+    }
+    return c;
+  }
+  function speckle(x, base, amt) {
+    const d = x.createImageData(512, 512), p = d.data;
+    for (let i = 0; i < p.length; i += 4) { const n = (Math.random() - .5) * amt; p[i] = cl(base[0] + n); p[i + 1] = cl(base[1] + n); p[i + 2] = cl(base[2] + n); p[i + 3] = 255; }
+    x.putImageData(d, 0, 0);
+  }
+  function concrete() {
+    const c = cv(512), x = c.getContext("2d");
+    speckle(x, [160, 158, 154], 22);
+    for (let k = 0; k < 40; k++) {
+      x.fillStyle = Math.random() < .5 ? "rgba(255,255,255,.05)" : "rgba(0,0,0,.05)";
+      x.beginPath(); x.arc(40 + Math.random() * 432, 40 + Math.random() * 432, 15 + Math.random() * 40, 0, 7); x.fill();
+    }
+    x.strokeStyle = "rgba(70,70,70,.45)"; x.lineWidth = 1.5;
+    for (let k = 0; k <= 512; k += 256) { x.beginPath(); x.moveTo(k, 0); x.lineTo(k, 512); x.moveTo(0, k); x.lineTo(512, k); x.stroke(); }
+    return c;
+  }
+  function carpet() {
+    const c = cv(512), x = c.getContext("2d");
+    speckle(x, [60, 72, 92], 46);
+    return c;
+  }
+  const FLOORS = {
+    oak: { label: "Oak", make: () => planks(182, 146, 104) },
+    walnut: { label: "Walnut", make: () => planks(104, 70, 48) },
+    marble: { label: "Marble", make: marble },
+    checker: { label: "Checkerboard", make: checker },
+    concrete: { label: "Concrete", make: concrete },
+    carpet: { label: "Carpet", make: carpet },
+  };
+  const floorCanvases = {}, floorTextures = {};
+  function floorCanvas(k) { return floorCanvases[k] || (floorCanvases[k] = FLOORS[k].make()); }
+  function floorTexFor(k) {
+    if (!floorTextures[k]) { const t = canvasTex(floorCanvas(k)); t.wrapS = t.wrapT = THREE.RepeatWrapping; floorTextures[k] = t; }
+    return floorTextures[k];
+  }
+  function glowTex() {
+    const c = cv(256), g = c.getContext("2d");
+    const r = g.createRadialGradient(128, 90, 10, 128, 128, 128);
+    r.addColorStop(0, "rgba(255,240,210,.55)"); r.addColorStop(1, "rgba(255,240,210,0)");
+    g.fillStyle = r; g.fillRect(0, 0, 256, 256); return canvasTex(c);
+  }
+  function rugTex() {
+    const c = cv(256), x = c.getContext("2d");
+    x.fillStyle = "#6b2a30"; x.fillRect(0, 0, 256, 256);
+    x.fillStyle = "#c79f5a"; x.fillRect(0, 0, 18, 256); x.fillRect(238, 0, 18, 256);
+    x.fillStyle = "#24324a"; x.fillRect(18, 0, 14, 256); x.fillRect(224, 0, 14, 256);
+    x.strokeStyle = "#c79f5a"; x.lineWidth = 4;
+    x.beginPath(); x.moveTo(128, 30); x.lineTo(196, 128); x.lineTo(128, 226); x.lineTo(60, 128); x.closePath(); x.stroke();
+    x.fillStyle = "#24324a"; x.beginPath(); x.moveTo(128, 80); x.lineTo(162, 128); x.lineTo(128, 176); x.lineTo(94, 128); x.closePath(); x.fill();
+    x.fillStyle = "#c79f5a"; [0, 256].forEach(b => { x.beginPath(); x.arc(128, b, 10, 0, 7); x.fill(); });
+    const t = canvasTex(c); t.wrapS = THREE.ClampToEdgeWrapping; t.wrapT = THREE.RepeatWrapping; return t;
+  }
+  const GLOW = glowTex();
+  let rugMat = null;
+
+  // ---------- materials ----------
+  const lam = (c) => new THREE.MeshLambertMaterial({ color: c });
+  const wallMat = lam("#f1efe9");
+  const trimMat = lam("#3b3a37");
+  const frameMat = lam("#2a2724");
+  const floorMat = new THREE.MeshLambertMaterial();
+  const M = {
+    wood: lam("#6e5a44"), fabric: lam("#4e5d57"), pot: lam("#2f3536"), soil: lam("#3a2a1e"),
+    leaf: new THREE.MeshLambertMaterial({ color: "#3f6b3a", flatShading: true }),
+    leaf2: new THREE.MeshLambertMaterial({ color: "#5c8a45", flatShading: true }),
+    plinth: lam("#f4f3ef"),
+    bronze: new THREE.MeshPhongMaterial({ color: "#9a7440", shininess: 60, specular: "#553b1a" }),
+    stone: new THREE.MeshPhongMaterial({ color: "#d8d4cc", shininess: 10 }),
+    shade: new THREE.MeshLambertMaterial({ color: "#1f2224", side: THREE.DoubleSide }),
+    bulb: new THREE.MeshBasicMaterial({ color: "#fff1cf" }),
+  };
+
+  // ---------- furnishings ----------
+  function box(w, h, d, mat, x, y, z) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); return m; }
+  function bench(z) {
+    const g = new THREE.Group();
+    g.add(box(0.7, 0.08, 2.0, M.wood, 0, 0.46, 0));
+    [-0.8, 0.8].forEach(d => g.add(box(0.6, 0.42, 0.06, trimMat, 0, 0.21, d)));
+    g.position.z = z; return g;
+  }
+  function armchair(x, z, rot) {
+    const g = new THREE.Group();
+    g.add(box(0.78, 0.16, 0.72, M.fabric, 0, 0.4, 0));
+    g.add(box(0.78, 0.62, 0.14, M.fabric, 0, 0.75, 0.3));
+    g.add(box(0.12, 0.26, 0.72, M.fabric, -0.39, 0.58, 0));
+    g.add(box(0.12, 0.26, 0.72, M.fabric, 0.39, 0.58, 0));
+    [[-.33, -.3], [.33, -.3], [-.33, .3], [.33, .3]].forEach(([a, b]) => g.add(box(0.05, 0.32, 0.05, M.wood, a, 0.16, b)));
+    g.position.set(x, 0, z); g.rotation.y = rot; return g;
+  }
+  function plant(x, z, v) {
+    const g = new THREE.Group();
+    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.2, 0.5, 20), M.pot); pot.position.y = 0.25; g.add(pot);
+    const soil = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.02, 20), M.soil); soil.position.y = 0.49; g.add(soil);
+    if (v % 2 === 0) {
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.035, 0.9, 6), M.wood); trunk.position.y = 0.95; g.add(trunk);
+      for (let i = 0; i < 9; i++) {
+        const s = 0.15 + ((i * 37) % 10) / 55;
+        const b = new THREE.Mesh(new THREE.IcosahedronGeometry(s, 0), i % 2 ? M.leaf : M.leaf2);
+        const a = i * 2.4, r = 0.1 + (i % 3) * 0.06;
+        b.position.set(Math.cos(a) * r, 1.3 + ((i * 53) % 7) / 18, Math.sin(a) * r); b.scale.set(1, 0.8, 1); g.add(b);
+      }
+    } else {
+      for (let i = 0; i < 11; i++) {
+        const h = 0.6 + ((i * 29) % 9) / 12, a = i * 2.1;
+        const c = new THREE.Mesh(new THREE.ConeGeometry(0.05, h, 4), i % 2 ? M.leaf : M.leaf2);
+        c.position.set(Math.cos(a) * 0.1, 0.5 + h / 2, Math.sin(a) * 0.1);
+        c.rotation.set(Math.sin(a) * 0.18, 0, Math.cos(a) * 0.18); c.scale.z = 0.35; g.add(c);
+      }
+    }
+    g.position.set(x, 0, z); return g;
+  }
+  function sculpture(z, v) {
+    const g = new THREE.Group();
+    g.add(box(0.6, 1.0, 0.6, M.plinth, 0, 0.5, 0));
+    let s;
+    if (v % 3 === 0) { s = new THREE.Mesh(new THREE.TorusKnotGeometry(0.17, 0.055, 96, 12), M.bronze); s.position.y = 1.28; }
+    else if (v % 3 === 1) {
+      s = new THREE.Group(); let y = 1.0;
+      [0.2, 0.15, 0.1].forEach(r => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 16), M.stone); m.position.y = y + r; s.add(m); y += 2 * r * 0.92; });
+    } else { s = new THREE.Mesh(new THREE.IcosahedronGeometry(0.24, 0), M.bronze); s.position.y = 1.26; s.rotation.set(0.4, 0.6, 0); }
+    g.add(s); g.position.set(0, 0, z); return g;
+  }
+  function pendant(z) {
+    const g = new THREE.Group();
+    const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 1.0, 4), trimMat); cord.position.y = WALL_H - 0.5; g.add(cord);
+    const shade = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.3, 24, 1, true), M.shade); shade.position.y = WALL_H - 1.1; g.add(shade);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 8), M.bulb); bulb.position.y = WALL_H - 1.2; g.add(bulb);
+    g.position.set(0, 0, z); return g;
+  }
+
+  function bannerColors() {
+    const w = new THREE.Color(design.wall), L = 0.2126 * w.r + 0.7152 * w.g + 0.0722 * w.b;
+    const black = new THREE.Color("#101214"), white = new THREE.Color("#ffffff");
+    if (L > 0.42) { const bg = w.clone().lerp(black, 0.74); return { bg: "#" + bg.getHexString(), fg: "#f6f3ec", sub: "#" + bg.clone().lerp(white, 0.62).getHexString() }; }
+    const bg = w.clone().lerp(white, 0.86); return { bg: "#" + bg.getHexString(), fg: "#1b1d1f", sub: "#" + bg.clone().lerp(black, 0.5).getHexString() };
+  }
+  function applyFog(hex) { const c = new THREE.Color(hex).multiplyScalar(0.9); scene.fog.color.copy(c); scene.background.copy(c); }
+  function applyColors() { wallMat.color.set(design.wall); frameMat.color.set(design.frame); applyFog(design.wall); }
+
+  function buildShell() {
+    if (shell) { scene.remove(shell); shell.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.userData.disposeMap && o.material.map) o.material.map.dispose(); }); }
+    shell = new THREE.Group();
+    layout = computeLayout();
+    hallLen = layout.hallLen;
+    const zFront = 4, zBack = -hallLen, len = zFront - zBack, midZ = (zFront + zBack) / 2;
+
+    const ft = floorTexFor(design.floor); ft.repeat.set(HALF_W * 2 / 4, len / 4);
+    if (floorMat.map !== ft) { floorMat.map = ft; floorMat.needsUpdate = true; }
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(HALF_W * 2, len), floorMat);
+    floor.rotation.x = -Math.PI / 2; floor.position.set(0, 0, midZ); shell.add(floor);
+    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(HALF_W * 2, len), new THREE.MeshLambertMaterial({ color: "#fbfaf7" }));
+    ceil.rotation.x = Math.PI / 2; ceil.position.set(0, WALL_H, midZ); shell.add(ceil);
+    [-1, 1].forEach(s => {
+      const w = new THREE.Mesh(new THREE.PlaneGeometry(len, WALL_H), wallMat);
+      w.rotation.y = -s * Math.PI / 2; w.position.set(s * HALF_W, WALL_H / 2, midZ); shell.add(w);
+      shell.add(box(0.04, 0.14, len, trimMat, s * (HALF_W - 0.02), 0.07, midZ));
+      shell.add(box(0.06, 0.05, len, trimMat, s * (HALF_W - 1.1), WALL_H - 0.03, midZ));
+    });
+    [zFront, zBack].forEach((z, k) => {
+      const w = new THREE.Mesh(new THREE.PlaneGeometry(HALF_W * 2, WALL_H), wallMat);
+      w.position.set(0, WALL_H / 2, z); if (k === 0) w.rotation.y = Math.PI; shell.add(w);
+    });
+
+    // centre aisle: seating every other bay, sculptures in the bays between
+    let n = 0;
+    for (let z = -6; z > zBack + 3; z -= SPACING * 2, n++) {
+      if (design.seating === "benches") shell.add(bench(z));
+      else if (design.seating === "armchairs") { shell.add(armchair(-0.55, z, Math.PI / 2)); shell.add(armchair(0.55, z, -Math.PI / 2)); }
+      if (design.sculptures && z - SPACING > zBack + 3) shell.add(sculpture(z - SPACING, n));
+    }
+    // plants sit in the clear gaps between frames and wall labels
+    if (design.plants) {
+      let v = 0;
+      [-1, 1].forEach(s => shell.add(plant(s * (HALF_W - 0.6), 3.0, v++)));
+      layout.slots.forEach(sl => {
+        const pz = sl.z - (sl.side < 0 ? 2.96 : 2.24);
+        if (pz > zBack + 0.8) shell.add(plant(sl.side * (HALF_W - 0.55), pz, v++));
+      });
+    }
+    if (design.rug) {
+      if (!rugMat) rugMat = new THREE.MeshLambertMaterial({ map: rugTex() });
+      const z0 = -0.5, z1 = zBack + 2.5, L = z0 - z1;
+      rugMat.map.repeat.set(1, L / 2);
+      const rug = new THREE.Mesh(new THREE.PlaneGeometry(2.0, L), rugMat);
+      rug.rotation.x = -Math.PI / 2; rug.position.set(0, 0.008, (z0 + z1) / 2); shell.add(rug);
+    }
+    if (design.lights) [...new Set(layout.slots.map(sl => sl.z))].forEach(z => shell.add(pendant(z)));
+
+    const bc = bannerColors(), nm = (museum.name || "").trim() || "Virtual Museum";
+    shell.add(banner(nm, museum.subtitle, 6.2, 1.15, new THREE.Vector3(0, 3.7, -1.6), 0, bc));
+    shell.add(banner(nm, (museum.by || "").trim() ? "Curated by " + museum.by.trim() : "Thank you for visiting", 5, 1.0, new THREE.Vector3(0, 2.4, zBack + 0.02), 0, bc));
+    shellClick.length = 0;
+    layout.heads.forEach((h, k) => shell.add(galleryHead(h.title, k + 1, h.z, bc)));
+    const sp = statementPanel(); if (sp) { shell.add(sp); shellClick.push(sp); }
+    const dp = directoryPanel(); if (dp) shell.add(dp);
+    scene.add(shell);
+  }
+
+  function banner(title, sub, w, h, pos, rotY, bc) {
+    const c = cv(1600, Math.round(1600 * h / w));
+    const g = c.getContext("2d");
+    g.fillStyle = bc.bg; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = bc.fg; g.textAlign = "center"; g.textBaseline = "middle";
+    let size = 130; g.font = `700 ${size}px 'Bodoni Moda', Georgia, serif`;
+    while (g.measureText(title).width > c.width - 120 && size > 40) { size -= 6; g.font = `700 ${size}px 'Bodoni Moda', Georgia, serif`; }
+    g.fillText(title, c.width / 2, c.height * 0.43);
+    g.font = "500 40px 'Public Sans', Arial, sans-serif"; g.fillStyle = bc.sub;
+    g.fillText((sub || "").toUpperCase().split("").join(" "), c.width / 2, c.height * 0.78);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: canvasTex(c) }));
+    m.userData.disposeMap = true;
+    m.position.copy(pos); m.rotation.y = rotY; return m;
+  }
+
+  function wrap(g, text, maxW, maxLines) {
+    const words = String(text || "").replace(/\s+/g, " ").trim().split(" ");
+    const lines = []; let line = "";
+    for (const w of words) {
+      const t = line ? line + " " + w : w;
+      if (g.measureText(t).width > maxW && line) { lines.push(line); line = w; } else line = t;
+      if (lines.length === maxLines) break;
+    }
+    if (lines.length < maxLines && line) lines.push(line);
+    const usedAll = lines.join(" ").length >= words.join(" ").length;
+    if (!usedAll && lines.length) { let l = lines[lines.length - 1]; while (g.measureText(l + "…").width > maxW && l.length) l = l.slice(0, -1); lines[lines.length - 1] = l + "…"; }
+    return lines;
+  }
+
+  function hostOf(u) { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (_) { return ""; } }
+  function safeLink(u) { try { const x = new URL(String(u || "").trim()); return /^https?:$/.test(x.protocol) ? x.href : ""; } catch (_) { return ""; } }
+  const metaLine = (ex) => [ex.creator, ex.date].map(s => (s || "").trim()).filter(Boolean).join(", ");
+
+  const PLQ_W = 0.62, PLQ_H = 0.5425;
+  function placard(ex, n) {
+    const W = 640, H = 560, c = cv(W, H), g = c.getContext("2d");
+    g.fillStyle = "#fbfaf6"; g.fillRect(0, 0, W, H);
+    g.textBaseline = "top";
+    g.fillStyle = "#6b6f72"; g.font = "600 21px 'Public Sans', Arial";
+    g.fillText((ex.example ? "EXAMPLE · " : "") + "NO. " + String(n).padStart(2, "0"), 36, 30);
+    g.fillStyle = "#1b1d1f"; g.font = "700 40px 'Bodoni Moda', Georgia, serif";
+    const tl = wrap(g, ex.title || "Untitled", 568, 2);
+    tl.forEach((l, k) => g.fillText(l, 36, 62 + k * 46));
+    let y = 70 + tl.length * 46;
+    const meta = metaLine(ex);
+    if (meta) {
+      g.font = "italic 400 23px 'Public Sans', Arial"; g.fillStyle = "#44484b";
+      const ml = wrap(g, meta, 568, 2); ml.forEach((l, k) => g.fillText(l, 36, y + k * 30)); y += ml.length * 30 + 12;
+    }
+    const src = (ex.source || "").trim() || hostOf(safeLink(ex.link));
+    g.font = "400 19px 'Public Sans', Arial";
+    const sl = src ? wrap(g, "Source: " + src, 568, 2) : [];
+    const creditTop = H - 30 - sl.length * 26;
+    if (sl.length) {
+      g.strokeStyle = "#d9d6cf"; g.lineWidth = 2; g.beginPath(); g.moveTo(36, creditTop - 14); g.lineTo(W - 36, creditTop - 14); g.stroke();
+      g.fillStyle = "#5f6366"; sl.forEach((l, k) => g.fillText(l, 36, creditTop + k * 26));
+    }
+    g.font = "400 23px 'Public Sans', Arial"; g.fillStyle = "#33373a";
+    const bottom = sl.length ? creditTop - 26 : H - 28;
+    wrap(g, ex.caption, 568, Math.max(0, Math.floor((bottom - y) / 32))).forEach((l, k) => g.fillText(l, 36, y + k * 32));
+    return canvasTex(c);
+  }
+  function wrapText(g, text, maxW, maxLines) {
+    const out = [], paras = String(text || "").split(/\n+/).map(p => p.trim()).filter(Boolean);
+    for (let p = 0; p < paras.length; p++) {
+      const room = maxLines - out.length;
+      if (room <= 0) { if (out.length) out[out.length - 1] = out[out.length - 1].replace(/\s*$/, "…"); break; }
+      out.push(...wrap(g, paras[p], maxW, room));
+      if (p < paras.length - 1 && out.length < maxLines) out.push("");
+    }
+    return out;
+  }
+
+  // entrance panels and gallery signs
+  function statementPanel() {
+    const st = (museum.statement || "").trim(); if (!st) return null;
+    const W = 1200, H = 1100, c = cv(W, H), g = c.getContext("2d");
+    g.fillStyle = "#fbfaf6"; g.fillRect(0, 0, W, H);
+    g.textBaseline = "top"; g.fillStyle = "#6b6f72"; g.font = "600 28px 'Public Sans', Arial";
+    g.fillText("CURATOR’S STATEMENT".split("").join(" "), 80, 80);
+    g.fillStyle = "#1b1d1f"; g.font = "700 64px 'Bodoni Moda', Georgia, serif";
+    const tl = wrap(g, (museum.name || "").trim() || "Virtual Museum", W - 160, 2);
+    tl.forEach((l, k) => g.fillText(l, 80, 130 + k * 74));
+    const y = 160 + tl.length * 74, by = (museum.by || "").trim();
+    g.font = "400 34px 'Public Sans', Arial"; g.fillStyle = "#2e3235";
+    wrapText(g, st, W - 160, Math.floor((H - y - (by ? 140 : 70)) / 50)).forEach((l, k) => g.fillText(l, 80, y + k * 50));
+    if (by) { g.font = "italic 400 32px 'Public Sans', Arial"; g.fillStyle = "#5f6366"; g.fillText("Curated by " + by, 80, H - 100); }
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.2), new THREE.MeshBasicMaterial({ map: canvasTex(c) }));
+    m.userData.disposeMap = true; m.userData.statement = true;
+    m.position.set(-HALF_W + 0.04, 1.65, -1.0); m.rotation.y = Math.PI / 2;
+    return m;
+  }
+  function directoryPanel() {
+    const heads = layout.heads.slice(0, 10); if (!heads.length) return null;
+    const list = shownExhibits(), rowH = 96, W = 1000, H = 220 + heads.length * rowH;
+    const c = cv(W, H), g = c.getContext("2d");
+    g.fillStyle = "#fbfaf6"; g.fillRect(0, 0, W, H);
+    g.textBaseline = "top"; g.fillStyle = "#6b6f72"; g.font = "600 26px 'Public Sans', Arial";
+    g.fillText("IN THIS MUSEUM".split("").join(" "), 70, 70);
+    heads.forEach((h, k) => {
+      const y = 140 + k * rowH, next = layout.heads[k + 1] ? layout.heads[k + 1].index : list.length, n = next - h.index;
+      g.fillStyle = "#6b6f72"; g.font = "600 22px 'Public Sans', Arial"; g.textAlign = "left";
+      g.fillText("GALLERY " + (k + 1), 70, y);
+      g.fillStyle = "#1b1d1f"; g.font = "700 40px 'Bodoni Moda', Georgia, serif";
+      g.fillText(wrap(g, h.title, W - 330, 1)[0] || "", 70, y + 28);
+      g.fillStyle = "#5f6366"; g.font = "400 24px 'Public Sans', Arial"; g.textAlign = "right";
+      g.fillText(n + (n === 1 ? " piece" : " pieces"), W - 70, y + 40); g.textAlign = "left";
+    });
+    const pw = 1.9, ph = pw * H / W;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), new THREE.MeshBasicMaterial({ map: canvasTex(c) }));
+    m.userData.disposeMap = true;
+    m.position.set(HALF_W - 0.04, Math.min(1.65, 2.9 - ph / 2), -1.0); m.rotation.y = -Math.PI / 2;
+    return m;
+  }
+  function galleryHead(title, n, z, bc) {
+    const c = cv(1400, 260), g = c.getContext("2d");
+    g.fillStyle = bc.bg; g.fillRect(0, 0, 1400, 260);
+    g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillStyle = bc.sub; g.font = "600 34px 'Public Sans', Arial";
+    g.fillText(("GALLERY " + n).split("").join(" "), 700, 66);
+    g.fillStyle = bc.fg; let size = 96; g.font = `700 ${size}px 'Bodoni Moda', Georgia, serif`;
+    while (g.measureText(title).width > 1300 && size > 36) { size -= 4; g.font = `700 ${size}px 'Bodoni Moda', Georgia, serif`; }
+    g.fillText(title, 700, 168);
+    const grp = new THREE.Group();
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 4.6 * 260 / 1400), new THREE.MeshBasicMaterial({ map: canvasTex(c) }));
+    m.userData.disposeMap = true; m.position.y = 3.45; grp.add(m);
+    [-2.1, 2.1].forEach(x => { const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.8, 4), trimMat); cord.position.set(x, WALL_H - 0.4, 0); grp.add(cord); });
+    grp.position.z = z; return grp;
+  }
+
+  function imageTexture(ex, onSize) {
+    if (ex.canvas) { onSize(ex.canvas.width, ex.canvas.height); return canvasTex(ex.canvas); }
+    if (texCache.has(ex.url)) { const t = texCache.get(ex.url); if (t.image && t.image.width) onSize(t.image.width, t.image.height); return t; }
+    const t = new THREE.TextureLoader().load(ex.url, (tt) => { onSize(tt.image.width, tt.image.height); });
+    t.encoding = THREE.sRGBEncoding; t.anisotropy = 4; texCache.set(ex.url, t); return t;
+  }
+
+  const clickables = [], shellClick = [];
+  const stations = [];   // per exhibit: {pos: Vector3 (viewing spot), yaw}
+  let layout = { slots: [], heads: [], hallLen: 18.4 };
+  // exhibits alternate walls; a gallery heading starts a fresh row after a gap
+  function computeLayout() {
+    const list = shownExhibits(), slots = [], heads = [];
+    let z = -5, filled = 0;
+    list.forEach((ex, i) => {
+      const head = (ex.gallery || "").trim();
+      if (head) {
+        if (filled) { z -= SPACING; filled = 0; }
+        z -= 1.8;
+        heads.push({ title: head, z: z + 2.9, index: i });
+      }
+      slots.push({ side: filled ? 1 : -1, z });
+      if (filled) { filled = 0; z -= SPACING; } else filled = 1;
+    });
+    const lastZ = slots.length ? slots[slots.length - 1].z : -5;
+    return { slots, heads, hallLen: Math.max(18.4, -lastZ + 8.2) };
+  }
+
+  function buildHang() {
+    if (hang) { scene.remove(hang); hang.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.userData.disposeMap && o.material.map) o.material.map.dispose(); }); }
+    hang = new THREE.Group(); clickables.length = 0; stations.length = 0;
+    layout = computeLayout();
+    const list = shownExhibits(), ps = bigText ? 1.3 : 1;
+    list.forEach((ex, i) => {
+      const { side, z } = layout.slots[i];
+      const grp = new THREE.Group();
+      grp.position.set(side * (HALF_W - 0.03), 0, z);
+      grp.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
+
+      const glow = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 3.6), new THREE.MeshBasicMaterial({ map: GLOW, transparent: true, depthWrite: false }));
+      glow.position.set(0, 2.1, 0.005); grp.add(glow);
+
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 0.06), frameMat);
+      const mat = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshLambertMaterial({ color: "#f7f5ef" }));
+      const pic = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: "#ffffff" }));
+      pic.userData.index = i; clickables.push(pic);
+      grp.add(frame, mat, pic);
+
+      const plq = new THREE.Mesh(new THREE.PlaneGeometry(PLQ_W * ps, PLQ_H * ps), new THREE.MeshBasicMaterial({ map: placard(ex, i + 1) }));
+      plq.userData.disposeMap = true; plq.userData.index = i; clickables.push(plq);
+      grp.add(plq);
+
+      const tex = imageTexture(ex, (w, h) => sizeTo(w, h));
+      pic.material.map = tex; pic.material.needsUpdate = true;
+
+      function sizeTo(w, h) {
+        const ar = w / h, maxW = 2.5, maxH = 1.9;
+        let pw = maxW, ph = maxW / ar; if (ph > maxH) { ph = maxH; pw = maxH * ar; }
+        const cy = 1.75;
+        pic.scale.set(pw, ph, 1); pic.position.set(0, cy, 0.05);
+        mat.scale.set(pw + 0.26, ph + 0.26, 1); mat.position.set(0, cy, 0.04);
+        frame.scale.set(pw + 0.36, ph + 0.36, 1); frame.position.set(0, cy, 0.0);
+        plq.position.set(pw / 2 + 0.23 + PLQ_W * ps / 2, 1.36 - PLQ_H * ps / 2, 0.02);
+      }
+      if (!ex.canvas && !(tex.image && tex.image.width)) sizeTo(ex.w || 4, ex.h || 3);
+      hang.add(grp);
+
+      // viewing station: 2.7 m out from the wall, facing it
+      stations.push({ pos: new THREE.Vector3(side * (HALF_W - 2.7), 0, z), yaw: side < 0 ? Math.PI / 2 : -Math.PI / 2 });
+    });
+    scene.add(hang);
+  }
+
+  function shownExhibits() { return exhibits.length ? exhibits : EXAMPLES; }
+
+  // ---------- navigation ----------
+  const nav = { x: 0, z: 2.2, yaw: 0, pitch: -0.02, tx: null, tz: null, tyaw: null, keys: new Set(), hold: 0 };
+  function angleLerp(a, b, t) { let d = ((b - a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI; return a + d * t; }
+
+  function galleryOf(i) { const list = shownExhibits(); for (let k = Math.min(i, list.length - 1); k >= 0; k--) { const g = (list[k].gallery || "").trim(); if (g) return g; } return ""; }
+  const hasStatement = () => !!(museum.statement || "").trim();
+  function goTo(i) {
+    const list = shownExhibits();
+    if (!list.length) return;
+    if (i < 0) {
+      tourIndex = -1;
+      if (hasStatement()) { nav.tx = -HALF_W + 2.7; nav.tz = -1.0; nav.tyaw = Math.PI / 2; }
+      else { nav.tx = 0; nav.tz = 2.2; nav.tyaw = 0; }
+      nav.pitch = -0.02; updateTour(); return;
+    }
+    tourIndex = Math.max(0, Math.min(list.length - 1, i));
+    const s = stations[tourIndex]; if (!s) return;
+    nav.tx = s.pos.x; nav.tz = s.pos.z; nav.tyaw = s.yaw; nav.pitch = -0.02;
+    updateTour();
+  }
+  function updateTour() {
+    const list = shownExhibits();
+    stopSpeech();
+    if (tourIndex < 0) {
+      $("tourCount").textContent = `Entrance · ${list.length} ${list.length === 1 ? "piece" : "pieces"}`;
+      $("tourTitle").textContent = hasStatement() ? "Curator’s statement" : "Use the arrows to tour the hall";
+    } else {
+      const ex = list[tourIndex], gname = galleryOf(tourIndex);
+      $("tourCount").textContent = `${gname ? gname + " · " : ""}${tourIndex + 1} of ${list.length}${ex.example ? " · example" : ""}`;
+      $("tourTitle").textContent = ex.title || "Untitled";
+    }
+    $("prev").disabled = tourIndex < 0;
+    $("next").disabled = tourIndex >= list.length - 1;
+    $("speakBtn").hidden = !canSpeak || (tourIndex < 0 && !hasStatement());
+  }
+  $("prev").onclick = () => goTo(tourIndex - 1);
+  $("next").onclick = () => goTo(tourIndex + 1);
+  const openCurrent = () => { if (tourIndex >= 0) openDetail(tourIndex); else if (hasStatement()) openStatement(); else goTo(0); };
+  $("nowBox").onclick = openCurrent;
+  $("nowBox").onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openCurrent(); } };
+  $("speakBtn").onclick = () => speakToggle(tourIndex < 0 ? statementText() : labelText(shownExhibits()[tourIndex]), $("speakBtn"));
+
+  window.addEventListener("keydown", (e) => {
+    if (e.target.closest && e.target.closest("input, textarea")) return;
+    if (!$("textview").hidden) { if (e.key === "Escape") closeTextView(); return; }
+    if (!$("detail").hidden) { if (e.key === "Escape") closeDetail(); if (e.key === "ArrowRight") detailStep(1); if (e.key === "ArrowLeft") detailStep(-1); return; }
+    const k = e.key.toLowerCase();
+    if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) { nav.keys.add(k); nav.tx = nav.tz = nav.tyaw = null; e.preventDefault(); }
+    if (k === "n" || k === "pagedown") goTo(tourIndex + 1);
+    if (k === "p" || k === "pageup") goTo(tourIndex - 1);
+  });
+  window.addEventListener("keyup", (e) => nav.keys.delete(e.key.toLowerCase()));
+  window.addEventListener("blur", () => nav.keys.clear());
+
+  let drag = null;
+  stage.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, id: e.pointerId }; stage.setPointerCapture(e.pointerId); });
+  stage.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+    nav.yaw += dx * 0.004; nav.pitch = Math.max(-1.1, Math.min(1.1, nav.pitch + dy * 0.004)); nav.tyaw = null;
+  });
+  stage.addEventListener("pointerup", (e) => {
+    if (!drag) return;
+    const moved = Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy); drag = null;
+    if (moved < 6) pick(e);
+  });
+  stage.addEventListener("wheel", (e) => { e.preventDefault(); stepForward(-e.deltaY * 0.004); }, { passive: false });
+
+  function bindHold(id, dir) {
+    const b = $(id);
+    const on = (e) => { e.preventDefault(); nav.hold = dir; nav.tx = nav.tz = nav.tyaw = null; };
+    const off = () => { nav.hold = 0; };
+    b.addEventListener("pointerdown", on); ["pointerup", "pointerleave", "pointercancel"].forEach(t => b.addEventListener(t, off));
+  }
+  bindHold("fwd", 1); bindHold("back", -1);
+
+  function stepForward(d) {
+    nav.tx = nav.tz = null;
+    nav.x += -Math.sin(nav.yaw) * d; nav.z += -Math.cos(nav.yaw) * d; clampPos();
+  }
+  function clampPos() { nav.x = Math.max(-HALF_W + 0.7, Math.min(HALF_W - 0.7, nav.x)); nav.z = Math.max(-hallLen + 0.8, Math.min(3.4, nav.z)); }
+
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  function pick(e) {
+    const r = renderer.domElement.getBoundingClientRect();
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    const hit = ray.intersectObjects(clickables.concat(shellClick), false)[0];
+    if (!hit || hit.distance > 14) return;
+    if (hit.object.userData.statement) { goTo(-1); openStatement(); return; }
+    const i = hit.object.userData.index; goTo(i); openDetail(i);
+  }
+
+  // ---------- read aloud ----------
+  const canSpeak = typeof window.speechSynthesis !== "undefined" && typeof window.SpeechSynthesisUtterance !== "undefined";
+  let speakingBtn = null;
+  function setSpeakLabel(b, on) {
+    b.setAttribute("aria-pressed", String(on));
+    if (b.dataset.text === "icon") { b.classList.toggle("on", on); b.setAttribute("aria-label", on ? "Stop reading" : (b.dataset.label || "Read aloud")); }
+    else b.textContent = on ? "Stop reading" : "Read aloud";
+  }
+  function stopSpeech() {
+    if (canSpeak) { try { window.speechSynthesis.cancel(); } catch (_) {} }
+    if (speakingBtn) { const b = speakingBtn; speakingBtn = null; setSpeakLabel(b, false); }
+  }
+  function speakToggle(text, b) {
+    if (!canSpeak || !text) return;
+    if (speakingBtn === b) { stopSpeech(); return; }
+    stopSpeech();
+    const u = new SpeechSynthesisUtterance(text); u.rate = 0.95;
+    u.onend = u.onerror = () => { if (speakingBtn === b) { speakingBtn = null; setSpeakLabel(b, false); } };
+    speakingBtn = b; setSpeakLabel(b, true);
+    try { window.speechSynthesis.speak(u); } catch (_) { stopSpeech(); }
+  }
+  function labelText(ex) {
+    if (!ex) return "";
+    const parts = [ex.title || "Untitled"], meta = metaLine(ex);
+    if (meta) parts.push(meta);
+    if ((ex.caption || "").trim()) parts.push(ex.caption.trim());
+    if ((ex.alt || "").trim()) parts.push("Image description: " + ex.alt.trim());
+    if ((ex.source || "").trim()) parts.push("Source: " + ex.source.trim());
+    return parts.map(p => p.replace(/[.\s]+$/, "")).join(". ") + ".";
+  }
+  function statementText() {
+    const by = (museum.by || "").trim();
+    return "Curator’s statement. " + ((museum.name || "").trim() || "Virtual Museum") + ". " + (museum.statement || "").trim() + (by ? " Curated by " + by + "." : "");
+  }
+
+  // ---------- detail overlay ----------
+  let detailMode = "exhibit";
+  function srcOf(ex) { return ex.canvas ? ex.canvas.toDataURL("image/jpeg", 0.85) : ex.url; }
+  function openDetail(i) {
+    const list = shownExhibits(); const ex = list[i]; if (!ex) return;
+    detailMode = "exhibit"; tourIndex = i; updateTour();
+    $("dCard").classList.remove("noimg"); $("dImgWrap").hidden = false;
+    $("dImg").src = srcOf(ex); $("dImg").alt = (ex.alt || "").trim() || ex.title || "Exhibit image";
+    const gname = galleryOf(i);
+    $("dCount").textContent = `${gname ? gname + " · " : ""}No. ${String(i + 1).padStart(2, "0")} of ${list.length}${ex.example ? " · example" : ""}`;
+    $("dTitle").textContent = ex.title || "Untitled";
+    const meta = metaLine(ex); $("dMeta").textContent = meta; $("dMeta").hidden = !meta;
+    $("dCap").textContent = ex.caption || "";
+    const alt = (ex.alt || "").trim(); $("dDesc").textContent = alt; $("dDescWrap").hidden = !alt;
+    const src = (ex.source || "").trim(), link = safeLink(ex.link);
+    $("dSource").textContent = src ? "Source: " + src : "Source:";
+    $("dLink").hidden = !link;
+    if (link) { $("dLink").href = link; $("dLink").textContent = hostOf(link) ? "View at " + hostOf(link) : "View source"; }
+    $("dCredit").hidden = !src && !link;
+    $("dPrev").disabled = i === 0 && !hasStatement();
+    $("dNext").disabled = i === list.length - 1;
+    $("dSpeak").hidden = !canSpeak;
+    $("detail").hidden = false; $("dClose").focus();
+  }
+  function openStatement() {
+    detailMode = "statement"; tourIndex = -1; updateTour();
+    $("dCard").classList.add("noimg"); $("dImgWrap").hidden = true;
+    $("dCount").textContent = "Curator’s statement";
+    $("dTitle").textContent = (museum.name || "").trim() || "Virtual Museum";
+    const by = (museum.by || "").trim(); $("dMeta").textContent = by ? "Curated by " + by : ""; $("dMeta").hidden = !by;
+    $("dCap").textContent = (museum.statement || "").trim();
+    $("dCredit").hidden = true; $("dDescWrap").hidden = true;
+    $("dPrev").disabled = true; $("dNext").disabled = !shownExhibits().length;
+    $("dSpeak").hidden = !canSpeak;
+    $("detail").hidden = false; $("dClose").focus();
+  }
+  function closeDetail() { $("detail").hidden = true; stopSpeech(); }
+  function detailStep(d) {
+    if (detailMode === "statement") { if (d > 0) { goTo(0); openDetail(0); } return; }
+    const n = tourIndex + d;
+    if (n < 0) { if (hasStatement()) { goTo(-1); openStatement(); } return; }
+    if (n < shownExhibits().length) { goTo(n); openDetail(n); }
+  }
+  $("dClose").onclick = closeDetail; $("dPrev").onclick = () => detailStep(-1); $("dNext").onclick = () => detailStep(1);
+  $("dSpeak").onclick = () => speakToggle(detailMode === "statement" ? statementText() : labelText(shownExhibits()[tourIndex]), $("dSpeak"));
+  $("detail").addEventListener("click", (e) => { if (e.target.id === "detail") closeDetail(); });
+
+  // ---------- text view ----------
+  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function openTextView() {
+    stopSpeech();
+    const body = $("tvBody"); body.innerHTML = "";
+    $("tvTitle").textContent = (museum.name || "").trim() || "Virtual Museum";
+    if ((museum.subtitle || "").trim()) body.append(el("p", "tvsub", museum.subtitle.trim()));
+    if ((museum.by || "").trim()) body.append(el("p", "tvmeta", "Curated by " + museum.by.trim()));
+    if (hasStatement()) {
+      body.append(el("h3", null, "Curator’s statement"));
+      museum.statement.trim().split(/\n+/).filter(Boolean).forEach(p => body.append(el("p", null, p)));
+      if (canSpeak) { const t = el("div", "tvtools"); const b = btn("Read aloud", () => speakToggle(statementText(), b)); t.append(b); body.append(t); }
+    }
+    const list = shownExhibits();
+    list.forEach((ex, i) => {
+      const g = (ex.gallery || "").trim();
+      if (g) body.append(el("h3", null, g));
+      const a = el("article");
+      a.append(el("h4", null, `No. ${String(i + 1).padStart(2, "0")} · ${ex.title || "Untitled"}${ex.example ? " (example)" : ""}`));
+      const meta = metaLine(ex); if (meta) a.append(el("p", "tvmeta", meta));
+      if ((ex.alt || "").trim()) { const p = el("p"); p.append(el("strong", null, "Image description: "), document.createTextNode(ex.alt.trim())); a.append(p); }
+      if ((ex.caption || "").trim()) a.append(el("p", null, ex.caption.trim()));
+      const src = (ex.source || "").trim(), link = safeLink(ex.link);
+      if (src || link) {
+        const p = el("p", "tvsrc", src ? "Source: " + src + " " : "Source: ");
+        if (link) { const l = el("a", null, hostOf(link) ? "View at " + hostOf(link) : "View source"); l.href = link; l.target = "_blank"; l.rel = "noopener noreferrer"; p.append(l); }
+        a.append(p);
+      }
+      const t = el("div", "tvtools");
+      t.append(btn("Show in the hall", () => { closeTextView(); goTo(i); }));
+      if (canSpeak) { const b = btn("Read aloud", () => speakToggle(labelText(ex), b)); t.append(b); }
+      a.append(t); body.append(a);
+    });
+    $("textview").hidden = false; $("tvClose").focus();
+  }
+  function closeTextView() { $("textview").hidden = true; stopSpeech(); }
+  $("textViewBtn").onclick = openTextView;
+  $("tvClose").onclick = closeTextView;
+  $("textview").addEventListener("click", (e) => { if (e.target.id === "textview") closeTextView(); });
+
+  // ---------- larger text ----------
+  function applyBig() { document.documentElement.classList.toggle("big", bigText); $("bigBtn").setAttribute("aria-pressed", String(bigText)); }
+  $("bigBtn").onclick = () => {
+    bigText = !bigText;
+    try { localStorage.setItem("museum-large-text", bigText ? "1" : "0"); } catch (_) {}
+    applyBig(); buildHang();
+  };
+
+  // ---------- render loop ----------
+  const clock = new THREE.Clock();
+  let snapCool = 0;
+  function frame() {
+    const dt = Math.min(clock.getDelta(), 0.05);
+    const k = nav.keys;
+    const fwd = (k.has("w") || k.has("arrowup") ? 1 : 0) - (k.has("s") || k.has("arrowdown") ? 1 : 0) + nav.hold;
+    const turn = (k.has("a") || k.has("arrowleft") ? 1 : 0) - (k.has("d") || k.has("arrowright") ? 1 : 0);
+    if (fwd) stepForward(fwd * 3.2 * dt);
+    if (turn) nav.yaw += turn * 1.6 * dt;
+
+    if (renderer.xr.isPresenting) xrLocomotion(dt);
+
+    if (nav.tx != null) {
+      const t = 1 - Math.pow(0.02, dt);
+      nav.x += (nav.tx - nav.x) * t; nav.z += (nav.tz - nav.z) * t;
+      if (Math.hypot(nav.tx - nav.x, nav.tz - nav.z) < 0.01) { nav.tx = nav.tz = null; }
+    }
+    if (nav.tyaw != null) {
+      nav.yaw = angleLerp(nav.yaw, nav.tyaw, 1 - Math.pow(0.02, dt));
+      if (Math.abs(angleLerp(nav.yaw, nav.tyaw, 1) - nav.yaw) < 0.002) nav.tyaw = null;
+    }
+    rig.position.set(nav.x, 0, nav.z);
+    rig.rotation.y = nav.yaw;
+    if (!renderer.xr.isPresenting) { camera.position.set(0, 1.6, 0); camera.rotation.set(nav.pitch * -1, 0, 0); }
+    snapCool = Math.max(0, snapCool - dt);
+    renderer.render(scene, camera);
+  }
+
+  function xrLocomotion(dt) {
+    const session = renderer.xr.getSession(); if (!session) return;
+    for (const src of session.inputSources) {
+      const gp = src.gamepad; if (!gp || gp.axes.length < 4) continue;
+      const ax = gp.axes[2], ay = gp.axes[3];
+      if (src.handedness === "right") {
+        if (Math.abs(ax) > 0.6 && snapCool === 0) { nav.yaw -= Math.sign(ax) * Math.PI / 6; snapCool = 0.35; }
+      } else {
+        if (Math.abs(ay) > 0.15 || Math.abs(ax) > 0.15) {
+          const dir = new THREE.Vector3(); camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
+          const right = new THREE.Vector3(-dir.z, 0, dir.x);
+          nav.x += (dir.x * -ay + right.x * ax) * 2 * dt; nav.z += (dir.z * -ay + right.z * ax) * 2 * dt;
+          nav.tx = nav.tz = null; clampPos();
+        }
+      }
+    }
+  }
+
+  function resize() {
+    const w = stage.clientWidth || window.innerWidth, h = stage.clientHeight || window.innerHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  window.addEventListener("resize", resize);
+
+  // ---------- WebXR ----------
+  (async () => {
+    try {
+      if (!navigator.xr || !(await navigator.xr.isSessionSupported("immersive-vr"))) return;
+      const b = $("vrBtn"); b.hidden = false;
+      b.onclick = async () => {
+        if (renderer.xr.isPresenting) { renderer.xr.getSession().end(); return; }
+        try {
+          const s = await navigator.xr.requestSession("immersive-vr", { optionalFeatures: ["local-floor", "bounded-floor"] });
+          renderer.xr.setReferenceSpaceType("local-floor");
+          await renderer.xr.setSession(s);
+          camera.position.set(0, 0, 0); camera.rotation.set(0, 0, 0);
+          b.textContent = "Exit VR";
+          s.addEventListener("end", () => { b.textContent = "Enter VR"; });
+        } catch (err) { b.textContent = "VR unavailable here"; b.disabled = true; }
+      };
+    } catch (_) {}
+  })();
+
+  // ---------- rendering of museum text ----------
+  function applyMuseum() {
+    $("museumName").textContent = (museum.name || "").trim() || "Virtual Museum";
+    $("museumSub").textContent = museum.subtitle || "";
+    const by = (museum.by || "").trim();
+    $("museumBy").textContent = by ? "Curated by " + by : ""; $("museumBy").hidden = !by;
+    if (document.activeElement !== $("nameIn")) $("nameIn").value = museum.name || "";
+    if (document.activeElement !== $("subIn")) $("subIn").value = museum.subtitle || "";
+    if (document.activeElement !== $("byIn")) $("byIn").value = museum.by || "";
+    if (document.activeElement !== $("stmtIn")) $("stmtIn").value = museum.statement || "";
+  }
+
+
+  function rebuildAll() {
+    buildShell(); buildHang(); clampPos();
+    if (tourIndex >= shownExhibits().length) tourIndex = shownExhibits().length - 1;
+    updateTour(); renderCurator();
+  }
+
+  // ---------- look & feel ----------
+  const WALLS = [["#f1efe9", "Gallery white"], ["#d9d4cb", "Warm gray"], ["#b8c4b3", "Sage"], ["#c9b49a", "Sand"], ["#2f3e55", "Navy"], ["#6e2f2f", "Oxblood"], ["#3a3c3f", "Charcoal"]];
+  const FRAMES = [["#2a2724", "Black"], ["#b08d3c", "Gold"], ["#a77b4f", "Oak"], ["#5a3a26", "Walnut"], ["#f3f1ec", "White"], ["#9ea3a8", "Silver"]];
+  const HEX = /^#[0-9a-f]{6}$/i;
+  function sanitizeDesign(v) {
+    const d = { ...DEFAULT_DESIGN };
+    if (!v) return d;
+    if (typeof v.floor === "string" && Object.prototype.hasOwnProperty.call(FLOORS, v.floor)) d.floor = v.floor;
+    if (HEX.test(v.wall)) d.wall = v.wall.toLowerCase();
+    if (HEX.test(v.frame)) d.frame = v.frame.toLowerCase();
+    if (["none", "benches", "armchairs"].includes(v.seating)) d.seating = v.seating;
+    ["plants", "sculptures", "rug", "lights"].forEach(k => { if (typeof v[k] === "boolean") d[k] = v[k]; });
+    return d;
+  }
+  function setDesign(p) { design = { ...design, ...p }; applyColors(); buildShell(); renderDesignControls(); scheduleSave(); }
+
+  function chipRow(id, list, key) {
+    const row = $(id);
+    list.forEach(([hex, label]) => {
+      const b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.dataset.v = hex;
+      const sw = document.createElement("span"); sw.className = "sw"; sw.style.background = hex;
+      const t = document.createElement("span"); t.textContent = label;
+      b.append(sw, t); b.onclick = () => setDesign({ [key]: hex }); row.append(b);
+    });
+    const lab = document.createElement("label"); lab.className = "chip custom";
+    const inp = document.createElement("input"); inp.type = "color"; inp.id = key + "Custom";
+    inp.addEventListener("input", () => { (key === "wall" ? wallMat : frameMat).color.set(inp.value); if (key === "wall") applyFog(inp.value); });
+    inp.addEventListener("change", () => setDesign({ [key]: inp.value.toLowerCase() }));
+    const t = document.createElement("span"); t.textContent = "Custom";
+    lab.append(inp, t); row.append(lab);
+  }
+
+  function initDesign() {
+    const fo = $("floorOpts");
+    Object.keys(FLOORS).forEach(k => {
+      const b = document.createElement("button"); b.type = "button"; b.className = "floor-opt"; b.dataset.v = k;
+      const t = cv(120, 90); t.getContext("2d").drawImage(floorCanvas(k), 0, 0, 256, 192, 0, 0, 120, 90);
+      const img = document.createElement("img"); img.src = t.toDataURL("image/jpeg", 0.8); img.alt = "";
+      const s = document.createElement("span"); s.textContent = FLOORS[k].label;
+      b.append(img, s); b.onclick = () => setDesign({ floor: k }); fo.append(b);
+    });
+    chipRow("wallOpts", WALLS, "wall");
+    chipRow("frameOpts", FRAMES, "frame");
+    [["none", "None"], ["benches", "Benches"], ["armchairs", "Armchairs"]].forEach(([v, l]) => {
+      const b = document.createElement("button"); b.type = "button"; b.dataset.v = v; b.textContent = l;
+      b.onclick = () => setDesign({ seating: v }); $("seatOpts").append(b);
+    });
+    [["plants", "Potted plants"], ["sculptures", "Sculptures on plinths"], ["rug", "Rug down the center aisle"], ["lights", "Pendant lights"]].forEach(([k, l]) => {
+      const lab = document.createElement("label"); lab.className = "check";
+      const i = document.createElement("input"); i.type = "checkbox"; i.id = "obj-" + k;
+      i.onchange = () => setDesign({ [k]: i.checked });
+      const s = document.createElement("span"); s.textContent = l;
+      lab.append(i, s); $("objOpts").append(lab);
+    });
+    const rb = $("resetLook");
+    const disarm = () => { delete rb.dataset.armed; rb.textContent = "Restore the original look"; rb.classList.remove("warn"); };
+    rb.onclick = () => {
+      if (rb.dataset.armed) { disarm(); setDesign({ ...DEFAULT_DESIGN }); return; }
+      rb.dataset.armed = "1"; rb.textContent = "Confirm restore"; rb.classList.add("warn");
+      setTimeout(() => { if (rb.dataset.armed) disarm(); }, 4000);
+    };
+    $("nameIn").addEventListener("input", onNameInput);
+    $("subIn").addEventListener("input", onNameInput);
+    $("byIn").addEventListener("input", onNameInput);
+    $("tabEx").onclick = () => showTab("ex");
+    $("tabDesign").onclick = () => showTab("design");
+    renderDesignControls();
+  }
+
+  function renderDesignControls() {
+    document.querySelectorAll("#floorOpts .floor-opt").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === design.floor)));
+    [["wallOpts", "wall"], ["frameOpts", "frame"]].forEach(([id, key]) => {
+      let match = false;
+      $(id).querySelectorAll("button.chip").forEach(b => { const on = b.dataset.v.toLowerCase() === design[key].toLowerCase(); match = match || on; b.setAttribute("aria-pressed", String(on)); });
+      const inp = $(key + "Custom");
+      if (document.activeElement !== inp) inp.value = design[key];
+      inp.parentElement.classList.toggle("on", !match);
+    });
+    $("seatOpts").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === design.seating)));
+    ["plants", "sculptures", "rug", "lights"].forEach(k => { $("obj-" + k).checked = !!design[k]; });
+  }
+
+  function showTab(which) {
+    [["ex", "tabEx", "paneEx"], ["design", "tabDesign", "paneDesign"], ["share", "tabShare", "paneShare"]].forEach(([k, t, p]) => {
+      $(t).setAttribute("aria-selected", String(k === which)); $(p).hidden = k !== which;
+    });
+  }
+
+
+  let previewTimer = null;
+  function onNameInput() {
+    museum = { ...museum, name: $("nameIn").value, subtitle: $("subIn").value, by: $("byIn").value };
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => { applyMuseum(); buildShell(); }, 250);
+    scheduleSave();
+  }
+
+  // ---------- helpers ----------
+  const str = (v, n) => (typeof v === "string" ? v.slice(0, n) : "");
+  const num = (v, d) => (typeof v === "number" && isFinite(v) && v > 0 ? v : d);
+  const rid = () => "x" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  function cleanMuseum(m) { return { name: str(m && m.name, 80), subtitle: str(m && m.subtitle, 140), by: str(m && m.by, 80), statement: str(m && m.statement, 1500) }; }
+  const EX_TEXT = { title: 120, caption: 1200, creator: 120, date: 60, source: 200, link: 500, alt: 600, gallery: 80 };
+  function exText(e) { const o = {}; for (const k in EX_TEXT) o[k] = str(e[k], EX_TEXT[k]); return o; }
+  function cleanExhibit(e) { return { ...exText(e), w: num(e.w, 4), h: num(e.h, 3) }; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+  function slug(s) { return ((s || "").trim() || "my-museum").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "my-museum"; }
+  function applyLoaded(d) {
+    museum = cleanMuseum(d.museum || {});
+    if (!museum.name && !museum.subtitle) museum = { ...museum, name: "My Museum", subtitle: DEFAULT_SUB };
+    design = sanitizeDesign(d.design || null);
+    exhibits = d.exhibits || [];
+    texCache.clear();
+    applyMuseum(); applyColors(); tourIndex = -1; rebuildAll(); renderDesignControls();
+    nav.tx = 0; nav.tz = 2.2; nav.tyaw = 0;
+  }
+  function parseMuseumData(d) {
+    if (!d || typeof d !== "object") throw new Error("That file isn't a museum saved from this builder.");
+    const list = (Array.isArray(d.exhibits) ? d.exhibits : [])
+      .filter(e => e && typeof e.src === "string" && /^data:image\/(png|jpeg|webp|gif);base64,/.test(e.src))
+      .slice(0, 300)
+      .map(e => ({ ...cleanExhibit(e), id: rid(), url: e.src }));
+    return { museum: d.museum, design: d.design, exhibits: list };
+  }
+
+  // ---------- draft kept in this browser ----------
+  let idb = null, storageOk = true;
+  function openIdb(name) {
+    return new Promise((res) => {
+      try {
+        const r = indexedDB.open(name || "museum-builder", 1);
+        r.onupgradeneeded = () => {
+          const d = r.result;
+          if (!d.objectStoreNames.contains("meta")) d.createObjectStore("meta");
+          if (!d.objectStoreNames.contains("images")) d.createObjectStore("images");
+        };
+        r.onsuccess = () => res(r.result); r.onerror = () => res(null); r.onblocked = () => res(null);
+      } catch (_) { res(null); }
+    });
+  }
+  function idbReq(store, mode, fn) {
+    return new Promise((res, rej) => {
+      if (!idb) { rej(new Error("no storage")); return; }
+      try {
+        const tx = idb.transaction(store, mode); const r = fn(tx.objectStore(store));
+        tx.oncomplete = () => res(r ? r.result : undefined); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
+      } catch (e) { rej(e); }
+    });
+  }
+  function storageFail() { storageOk = false; setDraftNote(); }
+  const putImage = (id, src) => idbReq("images", "readwrite", s => s.put(src, id)).catch(storageFail);
+  const delImage = (id) => idbReq("images", "readwrite", s => s.delete(id)).catch(() => {});
+  function metaObj() { return { museum: { ...museum }, design: { ...design }, exhibits: exhibits.map(e => ({ id: e.id, ...exText(e), w: e.w, h: e.h })) }; }
+  let saveTimer = null;
+  function scheduleSave() { if (VIEW) return; clearTimeout(saveTimer); saveTimer = setTimeout(saveMeta, 500); }
+  function saveMeta() { if (!idb) return; idbReq("meta", "readwrite", s => s.put(metaObj(), "current")).catch(storageFail); }
+  function setDraftNote() {
+    const n = $("draftNote"); if (!n) return;
+    n.textContent = storageOk && idb
+      ? "This browser keeps your work while you build, but only on this device. Download your museum to turn it in or share it."
+      : "This browser isn't keeping a draft of your work. Download your museum before you close the page.";
+    n.classList.toggle("warnnote", !(storageOk && idb));
+  }
+  async function loadDraft() {
+    idb = await openIdb();
+    setDraftNote();
+    if (!idb) return;
+    try {
+      const m = await idbReq("meta", "readonly", s => s.get("current"));
+      if (!m) return;
+      const list = [];
+      for (const e of (Array.isArray(m.exhibits) ? m.exhibits : [])) {
+        const src = await idbReq("images", "readonly", s => s.get(e.id));
+        if (typeof src === "string") list.push({ ...cleanExhibit(e), id: e.id, url: src });
+      }
+      applyLoaded({ museum: m.museum, design: m.design, exhibits: list });
+    } catch (_) { storageFail(); }
+  }
+
+  // ---------- curator ----------
+  $("curateBtn").onclick = () => { $("curator").hidden = false; $("tour").hidden = true; renderCurator(); };
+  $("dlTop").onclick = () => { $("curator").hidden = false; $("tour").hidden = true; showTab("share"); renderCurator(); };
+  $("closeCurator").onclick = () => { $("curator").hidden = true; $("tour").hidden = false; };
+
+  function setStatus(msg, err) { const s = $("upStatus"); s.textContent = msg; s.classList.toggle("err", !!err); }
+
+  $("addBtn").onclick = () => $("fileIn").click();
+  $("fileIn").onchange = (e) => { handleFiles([...e.target.files]); e.target.value = ""; };
+  const dz = $("dropZone");
+  dz.addEventListener("dragover", (e) => { e.preventDefault(); dz.classList.add("over"); });
+  dz.addEventListener("dragleave", () => dz.classList.remove("over"));
+  dz.addEventListener("drop", (e) => { e.preventDefault(); dz.classList.remove("over"); handleFiles([...e.dataTransfer.files].filter(f => f.type.startsWith("image/"))); });
+
+  function loadImg(file) {
+    return new Promise((res, rej) => { const u = URL.createObjectURL(file); const im = new Image(); im.onload = () => res({ im, u }); im.onerror = () => { URL.revokeObjectURL(u); rej(new Error("this browser can't read that image format; try a JPG or PNG")); }; im.src = u; });
+  }
+  function readAsDataURL(blob) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error("couldn't read the file")); r.readAsDataURL(blob); }); }
+  async function prepare(file) {
+    const { im, u } = await loadImg(file);
+    let w = im.naturalWidth, h = im.naturalHeight, src;
+    const s = Math.min(1, 1800 / Math.max(w, h));
+    if (s === 1 && file.size < 1.5e6 && /^image\/(jpeg|png|webp)$/.test(file.type)) src = await readAsDataURL(file);
+    else {
+      w = Math.round(w * s); h = Math.round(h * s);
+      const c = cv(w, h), g = c.getContext("2d");
+      const png = file.type === "image/png" && w * h < 1.2e6;
+      if (!png) { g.fillStyle = "#ffffff"; g.fillRect(0, 0, w, h); }
+      g.drawImage(im, 0, 0, w, h);
+      src = png ? c.toDataURL("image/png") : c.toDataURL("image/jpeg", 0.86);
+    }
+    URL.revokeObjectURL(u);
+    return { src, w, h };
+  }
+  function titleFromName(n) { return n.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim(); }
+
+  async function handleFiles(files) {
+    if (!files.length) return;
+    let done = 0; const failed = [];
+    for (const f of files) {
+      setStatus(`Adding ${done + failed.length + 1} of ${files.length}: ${f.name}`);
+      try {
+        const { src, w, h } = await prepare(f);
+        const id = rid();
+        exhibits.push({ id, title: titleFromName(f.name), caption: "", url: src, w, h });
+        await putImage(id, src);
+        done++;
+      } catch (e) { failed.push(`${f.name} (${e && e.message ? e.message : "couldn't read it"})`); }
+    }
+    scheduleSave(); rebuildAll();
+    setStatus(failed.length ? `Added ${done}. Couldn't add ${failed.join("; ")}.` : `Added ${done} ${done === 1 ? "image" : "images"}. Write a title and caption for each below.`, failed.length > 0);
+  }
+
+  const openCredits = new Set();
+  function mkInput(id, value, max, ph, type) { const i = document.createElement("input"); i.type = type || "text"; i.id = id; i.dataset.key = id; i.value = value || ""; i.maxLength = max; if (ph) i.placeholder = ph; return i; }
+  function mkArea(id, value, max, ph) { const i = document.createElement("textarea"); i.id = id; i.dataset.key = id; i.value = value || ""; i.maxLength = max; if (ph) i.placeholder = ph; return i; }
+  function mkField(label, inp, hint) {
+    const f = el("div", "field"); const l = el("label", null, label); l.htmlFor = inp.id; f.append(l, inp);
+    if (hint) f.append(el("span", "hint", hint));
+    return f;
+  }
+  function needs(ex) {
+    const m = [];
+    if (!(ex.source || "").trim() && !safeLink(ex.link)) m.push("a source");
+    if (!(ex.alt || "").trim()) m.push("an image description");
+    return m;
+  }
+  function setNeedTag(tag, ex) {
+    const m = needs(ex);
+    tag.className = m.length ? "need" : "okc";
+    tag.textContent = m.length ? "Needs " + m.join(" and ") : "Complete";
+  }
+  function galleryNumber(i) { let n = 0; for (let k = 0; k <= i; k++) if ((exhibits[k].gallery || "").trim()) n++; return n; }
+
+  function renderCurator() {
+    if ($("curator").hidden) return;
+    $("exampleNote").hidden = exhibits.length > 0;
+    const list = $("itemList");
+    const ae = document.activeElement;
+    const focusedId = ae && ae.dataset ? ae.dataset.key : null;
+    const keep = focusedId ? { v: ae.value, s: ae.selectionStart, e: ae.selectionEnd } : null;
+    list.innerHTML = "";
+    exhibits.forEach((ex, i) => {
+      if ((ex.gallery || "").trim()) {
+        const gr = el("div", "galrow");
+        const gi = mkInput("g-" + ex.id, ex.gallery, 80, "Gallery heading");
+        gi.setAttribute("aria-label", "Heading for gallery " + galleryNumber(i));
+        gi.addEventListener("change", () => patch(ex.id, { gallery: gi.value.trim() }, true));
+        gr.append(el("span", "gallab", "Gallery " + galleryNumber(i)), gi, btn("Remove heading", () => patch(ex.id, { gallery: "" }, true)));
+        list.append(gr);
+      }
+      const row = el("div", "item");
+      const left = el("div");
+      const img = el("img", "thumb"); img.src = ex.url; img.alt = "";
+      left.append(img, el("div", "num", "NO. " + String(i + 1).padStart(2, "0")));
+      const fields = el("div", "fields");
+      const t = mkInput("t-" + ex.id, ex.title, 120, "Title"); t.setAttribute("aria-label", "Title for exhibit " + (i + 1));
+      const c = mkArea("c-" + ex.id, ex.caption, 1200, "Caption for the wall label"); c.setAttribute("aria-label", "Caption for exhibit " + (i + 1));
+      t.addEventListener("change", () => patch(ex.id, { title: t.value.trim() }));
+      c.addEventListener("change", () => patch(ex.id, { caption: c.value.trim() }));
+
+      const d = el("details", "credits"); d.open = openCredits.has(ex.id);
+      d.addEventListener("toggle", () => { if (d.open) openCredits.add(ex.id); else openCredits.delete(ex.id); });
+      const sm = el("summary", null, "Credit & image description "); const tag = el("span"); setNeedTag(tag, ex); sm.append(tag);
+      const grid = el("div", "cgrid");
+      const credit = [
+        ["creator", "cr-", "Creator", 120, "Who made it: photographer, artist or author", "text", null],
+        ["date", "dt-", "Date", 60, "For example: 1867, or c. 1900", "text", null],
+        ["source", "so-", "Source", 200, "Archive, library, museum or website", "text", null],
+        ["link", "li-", "Link to the source", 500, "https://", "url", "Visitors can open this link from the label."],
+      ];
+      credit.forEach(([key, pre, label, max, ph, type, hint]) => {
+        const inp = mkInput(pre + ex.id, ex[key], max, ph, type);
+        inp.addEventListener("change", () => { patch(ex.id, { [key]: inp.value.trim() }); setNeedTag(tag, ex); });
+        grid.append(mkField(label, inp, hint));
+      });
+      const alt = mkArea("al-" + ex.id, ex.alt, 600, "Describe what the image shows");
+      alt.addEventListener("change", () => { patch(ex.id, { alt: alt.value.trim() }); setNeedTag(tag, ex); });
+      grid.append(mkField("Image description", alt, "Read aloud and shown in Text view for visitors who can't see the image."));
+      d.append(sm, grid);
+
+      const tools = el("div", "tools");
+      const up = btn("↑ Earlier", () => swap(i, i - 1)); up.disabled = i === 0;
+      const dn = btn("↓ Later", () => swap(i, i + 1)); dn.disabled = i === exhibits.length - 1;
+      tools.append(up, dn);
+      if (!(ex.gallery || "").trim()) tools.append(btn("Start a gallery here", () => {
+        patch(ex.id, { gallery: "New gallery" }, true);
+        setTimeout(() => { const g = $("g-" + ex.id); if (g) { g.focus(); g.select(); } }, 0);
+      }));
+      tools.append(btn("View in hall", () => { $("curator").hidden = true; $("tour").hidden = false; goTo(i); }));
+      const rm = btn("Remove", () => {
+        if (rm.dataset.armed) { remove(ex); return; }
+        rm.dataset.armed = "1"; rm.textContent = "Confirm remove"; rm.classList.add("warn");
+        setTimeout(() => { if (rm.isConnected) { delete rm.dataset.armed; rm.textContent = "Remove"; rm.classList.remove("warn"); } }, 4000);
+      });
+      tools.append(rm);
+      fields.append(t, c, d, tools);
+      row.append(left, fields); list.append(row);
+    });
+    if (focusedId && $(focusedId)) { const e2 = $(focusedId); e2.value = keep.v; e2.focus(); try { e2.setSelectionRange(keep.s, keep.e); } catch (_) {} }
+  }
+  function btn(label, fn) { const b = document.createElement("button"); b.className = "btn"; b.type = "button"; b.textContent = label; b.onclick = fn; return b; }
+
+  function patch(id, data, relayout) {
+    const ex = exhibits.find(e => e.id === id); if (!ex) return;
+    Object.assign(ex, data); scheduleSave();
+    if (relayout) rebuildAll(); else { buildHang(); updateTour(); }
+  }
+  function swap(a, b) {
+    if (!exhibits[a] || !exhibits[b]) return;
+    [exhibits[a], exhibits[b]] = [exhibits[b], exhibits[a]];
+    scheduleSave(); rebuildAll();
+  }
+  function remove(ex) {
+    exhibits = exhibits.filter(e => e !== ex); delImage(ex.id);
+    scheduleSave(); rebuildAll(); setStatus(`Removed “${ex.title || "Untitled"}”.`);
+  }
+
+  // ---------- save & share ----------
+  function setShare(msg, err) { const s = $("shareStatus"); s.textContent = msg; s.classList.toggle("err", !!err); }
+  function buildExport() {
+    const data = { format: "museum-builder", version: 1, museum: cleanMuseum(museum), design: { ...design },
+      exhibits: exhibits.map(e => ({ ...exText(e), w: e.w, h: e.h, src: e.url })) };
+    const json = JSON.stringify(data).replace(/</g, "\\u003c");
+    const title = esc((museum.name || "").trim() || "Virtual Museum");
+    return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">" +
+      "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">" +
+      "<title>" + title + "</title>" + FONT_LINKS +
+      "<style>" + BASE_CSS + "</style><style id=\"hallStyle\">" + STYLE + "</style></head><body>" + PRISTINE +
+      "<script type=\"application/json\" id=\"museumData\">" + json + "<\/script>" +
+      "<script src=\"" + THREE_URL + "\"><\/script>" +
+      "<script>" + CODE + "<\/script></body></html>";
+  }
+  async function downloadMuseum() {
+    if (!exhibits.length) { setShare("Add at least one image before you download.", true); return; }
+    if (!downloads) { setShare("Downloading isn't available in this view of the page. Open the builder link directly in Chrome, Edge, Safari or Firefox and try again.", true); return; }
+    const html = buildExport(), name = slug(museum.name) + ".html";
+    const mb = (new Blob([html]).size / 1048576).toFixed(1);
+    setShare("Preparing your file…");
+    try {
+      await downloads.save({ filename: name, data: new Blob([html], { type: "text/html" }) });
+      setShare(`Downloaded ${name} (${mb} MB). Open it in any web browser to walk through your museum.`);
+    } catch (e) {
+      const code = e && e.code;
+      if (code === "declined") setShare("Download canceled.");
+      else if (code === "rate_limited") setShare("A download prompt is already open. Finish that one, then try again.", true);
+      else if (code === "too_large") setShare("This museum is too large to save from here. Remove a few images and try again.", true);
+      else setShare("Couldn't download the museum. " + (e && e.message ? e.message : ""), true);
+    }
+  }
+  async function openSaved(file) {
+    try {
+      const text = await file.text();
+      const doc = new DOMParser().parseFromString(text, "text/html");
+      const el = doc.getElementById("museumData");
+      if (!el) throw new Error("That file isn't a museum saved from this builder. Choose an .html file you downloaded with Download museum.");
+      const d = parseMuseumData(JSON.parse(el.textContent));
+      exhibits.forEach(e => delImage(e.id));
+      for (const e of d.exhibits) await putImage(e.id, e.url);
+      applyLoaded(d); saveMeta(); renderCurator();
+      setShare(`Opened “${(museum.name || "").trim() || "Untitled museum"}” with ${d.exhibits.length} ${d.exhibits.length === 1 ? "image" : "images"}. Download again after you make changes.`);
+    } catch (e) { setShare(e && e.message ? e.message : "Couldn't open that file.", true); }
+  }
+  function armButton(b, armedLabel, normalLabel, action) {
+    b.onclick = () => {
+      if (b.dataset.armed || !exhibits.length) { delete b.dataset.armed; b.textContent = normalLabel; b.classList.remove("warn"); action(); return; }
+      b.dataset.armed = "1"; b.textContent = armedLabel; b.classList.add("warn");
+      setTimeout(() => { if (b.dataset.armed) { delete b.dataset.armed; b.textContent = normalLabel; b.classList.remove("warn"); } }, 5000);
+    };
+  }
+  $("dlBtn").onclick = downloadMuseum;
+  armButton($("openBtn"), "Replace this museum? Choose again", "Open a saved museum", () => $("openIn").click());
+  $("openIn").onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) openSaved(f); };
+  armButton($("newBtn"), "Clear this museum? Choose again", "Start a new museum", () => {
+    exhibits.forEach(e => delImage(e.id));
+    applyLoaded({ museum: { name: "My Museum", subtitle: DEFAULT_SUB, by: museum.by, statement: "" }, design: null, exhibits: [] });
+    saveMeta(); renderCurator(); setShare("Started a new museum.");
+  });
+  $("tabShare").onclick = () => showTab("share");
+  $("stmtIn").addEventListener("input", () => {
+    museum = { ...museum, statement: $("stmtIn").value };
+    clearTimeout(previewTimer); previewTimer = setTimeout(() => { buildShell(); updateTour(); }, 300);
+    scheduleSave();
+  });
+
+  // ---------- class exhibition hall ----------
+  let hallMuseums = [], hallTitle = "Class Exhibition";
+  function setHallStatus(msg, err) { const s = $("hallStatus"); s.textContent = msg; s.classList.toggle("err", !!err); }
+  function hallKey(m) { return ((m.museum.name || "").trim() + "|" + (m.museum.by || "").trim()).toLowerCase(); }
+  function hallSaveMeta() {
+    if (!HALL_EDIT || !idb) return;
+    idbReq("meta", "readwrite", s => s.put({ title: hallTitle, ids: hallMuseums.map(m => m.id) }, "hall")).catch(() => {});
+  }
+  function hallPut(m) { if (HALL_EDIT && idb) return idbReq("images", "readwrite", s => s.put({ museum: m.museum, design: m.design, exhibits: m.exhibits }, m.id)).catch(() => {}); }
+  function hallDel(id) { if (HALL_EDIT && idb) idbReq("images", "readwrite", s => s.delete(id)).catch(() => {}); }
+  function toHallMuseum(d) {
+    const p = parseMuseumData(d);
+    return { id: rid(), museum: cleanMuseum(p.museum || {}), design: sanitizeDesign(p.design || null), exhibits: p.exhibits };
+  }
+  async function hallLoad() {
+    idb = await openIdb("class-exhibition");
+    if (!idb) return;
+    try {
+      const meta = await idbReq("meta", "readonly", s => s.get("hall"));
+      if (!meta) return;
+      hallTitle = str(meta.title, 100) || "Class Exhibition";
+      for (const id of (Array.isArray(meta.ids) ? meta.ids : [])) {
+        const v = await idbReq("images", "readonly", s => s.get(id));
+        if (v) hallMuseums.push({ id, museum: cleanMuseum(v.museum || {}), design: sanitizeDesign(v.design || null), exhibits: (v.exhibits || []).filter(e => e && typeof e.url === "string").map(e => ({ ...cleanExhibit(e), id: e.id || rid(), url: e.url })) });
+      }
+    } catch (_) {}
+  }
+  async function addMuseumFiles(files) {
+    let added = 0, replaced = 0; const failed = [];
+    for (const f of files) {
+      setHallStatus(`Reading ${f.name}…`);
+      try {
+        const doc = new DOMParser().parseFromString(await f.text(), "text/html");
+        const one = doc.getElementById("museumData"), many = doc.getElementById("exhibitionData");
+        let incoming = [];
+        if (one) incoming = [toHallMuseum(JSON.parse(one.textContent))];
+        else if (many) { const d = JSON.parse(many.textContent); incoming = (Array.isArray(d.museums) ? d.museums : []).map(m => toHallMuseum({ museum: m.museum, design: m.design, exhibits: m.exhibits })); }
+        else throw new Error("not a museum file");
+        for (const m of incoming) {
+          const k = hallKey(m), at = hallMuseums.findIndex(x => hallKey(x) === k);
+          if (at >= 0) { hallDel(hallMuseums[at].id); hallMuseums[at] = m; replaced++; } else { hallMuseums.push(m); added++; }
+          await hallPut(m);
+        }
+      } catch (e) { failed.push(f.name); }
+    }
+    hallSaveMeta(); renderLobby();
+    const parts = [];
+    if (added) parts.push(`Added ${added} ${added === 1 ? "museum" : "museums"}`);
+    if (replaced) parts.push(`updated ${replaced} that ${replaced === 1 ? "was" : "were"} already here`);
+    if (failed.length) parts.push(`couldn't read ${failed.join(", ")}. Use files downloaded from the Museum Builder`);
+    setHallStatus(parts.length ? parts.join("; ") + "." : "No museums found in those files.", failed.length > 0);
+  }
+  function renderLobby() {
+    $("lobbyTitle").textContent = hallTitle;
+    if (document.activeElement !== $("lobbyTitleIn")) $("lobbyTitleIn").value = hallTitle;
+    const n = hallMuseums.length;
+    $("lobbyCount").textContent = n ? `${n} ${n === 1 ? "museum" : "museums"}. Choose a door to walk in.` : "No museums yet.";
+    $("lobbyEmpty").hidden = n > 0;
+    $("dlHall").disabled = !n; $("clearHall").hidden = !n;
+    const wrap = $("doors"); wrap.innerHTML = "";
+    hallMuseums.forEach((m, i) => {
+      const card = el("div", "doorwrap");
+      const b = el("button", "door"); b.type = "button";
+      b.style.setProperty("--door-wall", m.design.wall); b.style.setProperty("--door-frame", m.design.frame);
+      const arch = el("div", "arch");
+      const cover = m.exhibits[0];
+      if (cover) { const img = el("img"); img.src = cover.url; img.alt = ""; arch.append(img); }
+      const name = (m.museum.name || "").trim() || "Untitled museum", by = (m.museum.by || "").trim();
+      const galleries = m.exhibits.filter(e => (e.gallery || "").trim()).length;
+      b.append(arch, el("span", "dname", name));
+      if (by) b.append(el("span", "dby", "Curated by " + by));
+      b.append(el("span", "dcount", `${m.exhibits.length} ${m.exhibits.length === 1 ? "piece" : "pieces"}${galleries ? ` · ${galleries} ${galleries === 1 ? "gallery" : "galleries"}` : ""}`));
+      b.setAttribute("aria-label", `Enter ${name}${by ? ", curated by " + by : ""}`);
+      b.onclick = () => enterMuseum(i);
+      card.append(b);
+      if (HALL_EDIT) {
+        const tools = el("div", "doortools");
+        const left = btn("‹", () => { if (i > 0) { [hallMuseums[i - 1], hallMuseums[i]] = [hallMuseums[i], hallMuseums[i - 1]]; hallSaveMeta(); renderLobby(); } });
+        left.setAttribute("aria-label", "Move " + name + " earlier"); left.disabled = i === 0;
+        const right = btn("›", () => { if (i < n - 1) { [hallMuseums[i + 1], hallMuseums[i]] = [hallMuseums[i], hallMuseums[i + 1]]; hallSaveMeta(); renderLobby(); } });
+        right.setAttribute("aria-label", "Move " + name + " later"); right.disabled = i === n - 1;
+        const rm = btn("Remove", () => {
+          if (!rm.dataset.armed) { rm.dataset.armed = "1"; rm.textContent = "Confirm"; rm.classList.add("warn"); setTimeout(() => { if (rm.isConnected) { delete rm.dataset.armed; rm.textContent = "Remove"; rm.classList.remove("warn"); } }, 4000); return; }
+          hallDel(m.id); hallMuseums = hallMuseums.filter(x => x !== m); hallSaveMeta(); renderLobby(); setHallStatus(`Removed “${name}”.`);
+        });
+        tools.append(left, right, rm); card.append(tools);
+      }
+      wrap.append(card);
+    });
+  }
+  function enterMuseum(i) {
+    const m = hallMuseums[i]; if (!m) return;
+    applyLoaded({ museum: m.museum, design: m.design, exhibits: m.exhibits });
+    $("plateEyebrow").textContent = hallTitle;
+    $("lobby").hidden = true; $("lobbyBtn").hidden = false;
+    renderer.setAnimationLoop(frame);
+  }
+  function showLobby() {
+    closeDetail(); closeTextView(); stopSpeech();
+    renderer.setAnimationLoop(null);
+    $("lobbyBtn").hidden = true; renderLobby(); $("lobby").hidden = false;
+  }
+  function buildHallExport() {
+    const data = { format: "class-exhibition", version: 1, title: hallTitle,
+      museums: hallMuseums.map(m => ({ museum: m.museum, design: m.design, exhibits: m.exhibits.map(e => ({ ...exText(e), w: e.w, h: e.h, src: e.url })) })) };
+    const json = JSON.stringify(data).replace(/</g, "\\u003c");
+    return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">" +
+      "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">" +
+      "<title>" + esc(hallTitle) + "</title>" + FONT_LINKS +
+      "<style>" + BASE_CSS + "</style><style id=\"hallStyle\">" + STYLE + "</style></head><body>" + PRISTINE +
+      "<script type=\"application/json\" id=\"exhibitionData\">" + json + "<\/script>" +
+      "<script src=\"" + THREE_URL + "\"><\/script>" +
+      "<script>" + CODE + "<\/script></body></html>";
+  }
+  async function downloadHall() {
+    if (!hallMuseums.length) return;
+    if (!downloads) { setHallStatus("Downloading isn't available in this view of the page. Open the exhibition hall link directly in a web browser and try again.", true); return; }
+    const html = buildHallExport(), name = slug(hallTitle) + ".html", mb = (new Blob([html]).size / 1048576).toFixed(1);
+    setHallStatus("Preparing the exhibition file…");
+    try {
+      await downloads.save({ filename: name, data: new Blob([html], { type: "text/html" }) });
+      setHallStatus(`Downloaded ${name} (${mb} MB). Share it with the class; it opens to this lobby.`);
+    } catch (e) {
+      const code = e && e.code;
+      if (code === "declined") setHallStatus("Download canceled.");
+      else if (code === "too_large") setHallStatus("The exhibition is too large to save from here. Remove a few museums and try again.", true);
+      else if (code === "rate_limited") setHallStatus("A download prompt is already open. Finish that one, then try again.", true);
+      else setHallStatus("Couldn't download the exhibition. " + (e && e.message ? e.message : ""), true);
+    }
+  }
+  async function hallBoot() {
+    $("lobbyBtn").onclick = showLobby;
+    $("lobbyTools").hidden = !HALL_EDIT; $("lobbyTitleIn").hidden = !HALL_EDIT; $("lobbyTitle").hidden = HALL_EDIT;
+    if (HALL_DATA) {
+      try {
+        const d = JSON.parse(HALL_DATA.textContent);
+        hallTitle = str(d.title, 100) || "Class Exhibition";
+        hallMuseums = (Array.isArray(d.museums) ? d.museums : []).map(m => toHallMuseum(m));
+      } catch (_) {}
+      $("lobbyEmpty").textContent = "This exhibition file has no museums in it.";
+    } else {
+      await hallLoad();
+      $("addMuseums").onclick = () => $("museumFiles").click();
+      $("museumFiles").onchange = (e) => { const fs = [...e.target.files]; e.target.value = ""; if (fs.length) addMuseumFiles(fs); };
+      const lb = $("lobby");
+      lb.addEventListener("dragover", (e) => { e.preventDefault(); lb.classList.add("over"); });
+      lb.addEventListener("dragleave", (e) => { if (e.target === lb) lb.classList.remove("over"); });
+      lb.addEventListener("drop", (e) => { e.preventDefault(); lb.classList.remove("over"); const fs = [...e.dataTransfer.files].filter(f => /\.html?$/i.test(f.name) || f.type === "text/html"); if (fs.length) addMuseumFiles(fs); });
+      $("lobbyTitleIn").addEventListener("input", () => { hallTitle = $("lobbyTitleIn").value.slice(0, 100); $("lobbyTitle").textContent = hallTitle; hallSaveMeta(); });
+      $("lobbyTitleIn").addEventListener("change", () => { if (!hallTitle.trim()) { hallTitle = "Class Exhibition"; renderLobby(); hallSaveMeta(); } });
+      $("dlHall").onclick = downloadHall;
+      const cb = $("clearHall");
+      cb.onclick = () => {
+        if (!cb.dataset.armed) { cb.dataset.armed = "1"; cb.textContent = "Remove every museum?"; cb.classList.add("warn"); setTimeout(() => { delete cb.dataset.armed; cb.textContent = "Remove all"; cb.classList.remove("warn"); }, 4000); return; }
+        delete cb.dataset.armed; cb.textContent = "Remove all"; cb.classList.remove("warn");
+        hallMuseums.forEach(m => hallDel(m.id)); hallMuseums = []; hallSaveMeta(); renderLobby(); setHallStatus("Removed every museum.");
+      };
+      if (window.claude && window.claude.use) { try { downloads = await window.claude.use("downloads"); } catch (_) {} }
+    }
+    showLobby();
+  }
+
+  // ---------- boot ----------
+  resize(); applyMuseum(); applyBig();
+  $("textViewBtn").hidden = false;
+  const boot = async () => {
+    initDesign(); applyColors();
+    if (HALL) {
+      $("curateBtn").hidden = true; $("dlTop").hidden = true;
+      rebuildAll();
+      await hallBoot();
+      return;
+    }
+    if (VIEW) {
+      $("curateBtn").hidden = true; $("dlTop").hidden = true;
+      try { applyLoaded(parseMuseumData(JSON.parse(document.getElementById("museumData").textContent))); } catch (_) { rebuildAll(); }
+      renderer.setAnimationLoop(frame);
+      return;
+    }
+    $("curateBtn").hidden = false; $("dlTop").hidden = false;
+    rebuildAll(); renderer.setAnimationLoop(frame);
+    await loadDraft();
+    if (window.claude && window.claude.use) { try { downloads = await window.claude.use("downloads"); } catch (_) {} }
+  };
+  (document.fonts && document.fonts.ready ? Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]) : Promise.resolve()).then(boot);
+})();
+</script>
+
+</body></html>
