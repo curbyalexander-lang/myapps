@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ecosystem Gallery</title>
+<script>
+/* =====================================================================
+   SETTINGS — edit these to fit your class
+   ===================================================================== */
+var GALLERY = {
+  title: 'Class Ecosystem Gallery',
+  subtitle: 'Step inside the ecosystems your classmates built. Open one on a computer, phone, or VR headset.',
+
+  // Folder (next to this page) where you upload students' ecosystem files.
+  folder: 'ecosystems',
+
+  // Link for the "Build your own" button. Leave '' to hide the button.
+  builderLink: 'ecosystem-builder.html',
+
+  // On GitHub Pages the gallery finds your repository automatically.
+  // Fill these in only if it can't (for example, a custom domain).
+  githubUser: '',
+  githubRepo: '',
+  branch: '',
+
+  // Optional: list file names here to show them in this order instead of
+  // listing the folder automatically, e.g. ['maria-desert-ecosystem.html'].
+  files: []
+};
+</script>
+<style>
+  :root { --ink: #1b2620; --muted: #5d6a62; --line: #dfe3dc; --paper: #f7f6f1; --card: #fff; --forest: #1e3a2c; --accent: #2e7d4f; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--ink); background: var(--paper); }
+  header { background: var(--forest); color: #fff; padding: 36px 20px 30px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+  header h1 { margin: 0 0 6px; font-size: clamp(26px, 4vw, 38px); letter-spacing: .2px; }
+  header p { margin: 0; color: #c9dbcf; font-size: 16px; max-width: 680px; line-height: 1.45; }
+  .head-row { display: flex; gap: 16px; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; }
+  a.btn { display: inline-block; background: #f2c14e; color: #1e2a20; text-decoration: none; font-weight: 650; padding: 10px 16px; border-radius: 9px; white-space: nowrap; }
+  a.btn:hover { background: #f6cf6d; }
+  .tools { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 22px 0 16px; }
+  .tools input, .tools select { font: inherit; padding: 9px 12px; border-radius: 9px; border: 1px solid #cdd3ca; background: #fff; color: var(--ink); }
+  .tools input { flex: 1; min-width: 220px; }
+  .count { color: var(--muted); font-size: 14px; margin-left: auto; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 18px; padding-bottom: 48px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; text-decoration: none; color: inherit;
+    transition: transform .15s, box-shadow .15s; }
+  .card:hover, .card:focus-visible { transform: translateY(-3px); box-shadow: 0 10px 28px rgba(20,40,30,.14); outline: none; }
+  .card:focus-visible { box-shadow: 0 0 0 3px var(--accent); }
+  .cover { position: relative; height: 150px; background: #c9d6cc center / cover no-repeat; }
+  .cover .biome { position: absolute; top: 10px; left: 10px; background: rgba(14,26,20,.72); color: #fff; font-size: 12px; font-weight: 600; padding: 4px 9px; border-radius: 999px; }
+  .strip { position: absolute; left: 0; right: 0; bottom: 8px; display: flex; justify-content: center; align-items: flex-end; gap: 4px; padding: 0 10px; }
+  .strip img { height: 44px; max-width: 54px; object-fit: contain; filter: drop-shadow(0 3px 3px rgba(0,0,0,.25)); }
+  .body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .body h2 { margin: 0; font-size: 18px; line-height: 1.25; }
+  .by { color: var(--muted); font-size: 14px; margin: 0; }
+  .desc { font-size: 14px; line-height: 1.45; margin: 2px 0 0; color: #333d37; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .meta { margin-top: auto; padding-top: 8px; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+  .dots { display: inline-flex; gap: 3px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .open { margin-left: auto; color: var(--accent); font-weight: 650; }
+  .msg { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 28px; text-align: center; color: var(--muted); grid-column: 1 / -1; line-height: 1.5; }
+  .msg b { color: var(--ink); }
+  .skeleton .cover { background: linear-gradient(90deg, #e6e9e3, #f1f3ef, #e6e9e3); background-size: 200% 100%; animation: sh 1.2s infinite; }
+  .skeleton .bar { height: 12px; border-radius: 6px; background: #eceee9; }
+  @keyframes sh { to { background-position: -200% 0; } }
+  footer { text-align: center; color: var(--muted); font-size: 13px; padding: 0 16px 32px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap head-row">
+    <div>
+      <h1 id="g-title"></h1>
+      <p id="g-sub"></p>
+    </div>
+    <a class="btn" id="g-build" href="#">Build your own ecosystem</a>
+  </div>
+</header>
+<main class="wrap">
+  <div class="tools">
+    <input type="search" id="q" placeholder="Search by title, creator, or organism" aria-label="Search ecosystems">
+    <select id="biome" aria-label="Filter by biome"><option value="">All biomes</option></select>
+    <select id="sort" aria-label="Sort">
+      <option value="title">Sort by title</option>
+      <option value="author">Sort by creator</option>
+      <option value="newest">Newest first</option>
+    </select>
+    <span class="count" id="count"></span>
+  </div>
+  <div class="grid" id="grid" aria-live="polite"></div>
+</main>
+<footer>Made with the Ecosystem Builder</footer>
+
+<script>
+(function () {
+  var PRESETS = {
+    forest: ['Temperate forest', '#5b97d8', '#d4e8f3', '#4f6d33'],
+    rainforest: ['Tropical rainforest', '#79a8b9', '#dbe9df', '#3a5626'],
+    grassland: ['Grassland / prairie', '#3e8fe2', '#eef2d4', '#a2ab55'],
+    desert: ['Desert', '#3c8be6', '#f5dfb9', '#d4ad73'],
+    tundra: ['Arctic tundra', '#8db4dc', '#eef3f8', '#dde5ea'],
+    wetland: ['Wetland / pond', '#5d98cc', '#e2ede7', '#5a7436'],
+    reef: ['Coral reef', '#4fb0d8', '#11557e', '#cdb98a'],
+    plain: ['Blank meadow', '#5a9be0', '#e8f0f6', '#8c9e72']
+  };
+  var ROLES = { producer: '#3c9d4c', primary: '#b88a00', secondary: '#d9681a', tertiary: '#c63a2f', omnivore: '#8f50b5', decomposer: '#86613f', abiotic: '#6f7a83' };
+  var $ = function (s) { return document.querySelector(s); };
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+  document.title = GALLERY.title;
+  $('#g-title').textContent = GALLERY.title;
+  $('#g-sub').textContent = GALLERY.subtitle;
+  if (GALLERY.builderLink) $('#g-build').href = GALLERY.builderLink; else $('#g-build').remove();
+
+  var folder = String(GALLERY.folder || '').replace(/^\/+|\/+$/g, '');
+  var items = [];
+
+  function repoInfo() {
+    var user = GALLERY.githubUser, repo = GALLERY.githubRepo;
+    var host = location.hostname, m = host.match(/^([^.]+)\.github\.io$/i);
+    if (!user && m) user = m[1];
+    if (!repo && m) {
+      var seg = location.pathname.split('/').filter(Boolean);
+      if (seg.length && /\.html?$/i.test(seg[seg.length - 1])) seg.pop();
+      repo = seg.length ? seg[0] : m[1] + '.github.io';
+      // Pages served from a subfolder of the repo (e.g. /docs) put the gallery deeper.
+      GALLERY._sub = seg.slice(1).join('/');
+    }
+    return user && repo ? { user: user, repo: repo } : null;
+  }
+
+  function listFiles() {
+    if (GALLERY.files && GALLERY.files.length) return Promise.resolve(GALLERY.files.slice());
+    var info = repoInfo();
+    if (!info) return Promise.reject(new Error('norepo'));
+    var path = [GALLERY._sub, folder].filter(Boolean).join('/');
+    var url = 'https://api.github.com/repos/' + encodeURIComponent(info.user) + '/' + encodeURIComponent(info.repo) +
+      '/contents/' + path.split('/').map(encodeURIComponent).join('/') + (GALLERY.branch ? '?ref=' + encodeURIComponent(GALLERY.branch) : '');
+    return fetch(url, { headers: { Accept: 'application/vnd.github+json' } }).then(function (r) {
+      if (r.status === 404) throw new Error('nofolder');
+      if (r.status === 403) throw new Error('ratelimit');
+      if (!r.ok) throw new Error('api');
+      return r.json();
+    }).then(function (list) {
+      return list.filter(function (f) { return f.type === 'file' && /\.html?$/i.test(f.name) && !/^index\.html?$/i.test(f.name); })
+        .map(function (f) { return f.name; });
+    });
+  }
+
+  function fileUrl(name) { return (folder ? folder + '/' : '') + name.split('/').map(encodeURIComponent).join('/'); }
+
+  function readEcosystem(name) {
+    return fetch(fileUrl(name)).then(function (r) { if (!r.ok) throw new Error('missing'); return r.text(); }).then(function (txt) {
+      var m = txt.match(/<script type="application\/json" id="eco-data">([\s\S]*?)<\/script>/);
+      if (!m) throw new Error('notEco');
+      var d = JSON.parse(m[1]), env = d.env || {}, imgs = d.images || {}, orgs = d.organisms || [];
+      var photo = env.mode === 'photo' && env.photoKey && imgs[env.photoKey];
+      var P = PRESETS[env.preset] || PRESETS.forest;
+      var seen = {}, strip = [];
+      orgs.forEach(function (o) { if (strip.length < 7 && imgs[o.img] && !seen[o.img]) { seen[o.img] = 1; strip.push(imgs[o.img]); } });
+      var roles = {}; orgs.forEach(function (o) { if (ROLES[o.role]) roles[o.role] = 1; });
+      return {
+        file: name, title: d.title || name, author: d.author || '', description: d.description || '',
+        biome: photo ? '360° photo' : P[0], biomeKey: photo ? 'photo' : (env.preset || 'forest'),
+        cover: photo ? 'url("' + photo + '")' : 'linear-gradient(' + P[1] + ',' + P[2] + ' 58%,' + P[3] + ' 59%)',
+        strip: strip, count: orgs.length, roles: Object.keys(roles), savedAt: d.savedAt || '',
+        names: orgs.map(function (o) { return (o.name || '') + ' ' + (o.sci || ''); }).join(' ').toLowerCase()
+      };
+    }).catch(function () {
+      return { file: name, title: name.replace(/\.html?$/i, '').replace(/[-_]+/g, ' '), author: '', description: '', biome: '', biomeKey: '',
+        cover: 'linear-gradient(#8fa8b8,#c9d6cc)', strip: [], count: null, roles: [], savedAt: '', names: '' };
+    });
+  }
+
+  function card(it) {
+    return '<a class="card" href="' + fileUrl(it.file) + '">' +
+      '<div class="cover" style=\'background-image:' + it.cover.replace(/'/g, '%27') + '\'>' +
+        (it.biome ? '<span class="biome">' + esc(it.biome) + '</span>' : '') +
+        '<div class="strip">' + it.strip.map(function (s) { return '<img alt="" src="' + s + '">'; }).join('') + '</div></div>' +
+      '<div class="body"><h2>' + esc(it.title) + '</h2>' +
+        (it.author ? '<p class="by">by ' + esc(it.author) + '</p>' : '') +
+        (it.description ? '<p class="desc">' + esc(it.description) + '</p>' : '') +
+        '<div class="meta">' + (it.count != null ? '<span>' + it.count + ' organism' + (it.count === 1 ? '' : 's') + '</span>' : '') +
+        (it.roles.length ? '<span class="dots" aria-hidden="true">' + it.roles.map(function (r) { return '<i class="dot" style="background:' + ROLES[r] + '"></i>'; }).join('') + '</span>' : '') +
+        '<span class="open">Explore →</span></div></div></a>';
+  }
+
+  function render() {
+    var q = $('#q').value.trim().toLowerCase(), b = $('#biome').value, s = $('#sort').value;
+    var shown = items.filter(function (it) {
+      if (b && it.biomeKey !== b) return false;
+      if (!q) return true;
+      return (it.title + ' ' + it.author + ' ' + it.description + ' ' + it.names).toLowerCase().indexOf(q) >= 0;
+    }).sort(function (a, c) {
+      if (s === 'newest') return (c.savedAt || '').localeCompare(a.savedAt || '');
+      var k = s === 'author' ? 'author' : 'title';
+      return (a[k] || '~').localeCompare(c[k] || '~', undefined, { sensitivity: 'base' });
+    });
+    $('#count').textContent = items.length ? shown.length + ' of ' + items.length + ' ecosystem' + (items.length === 1 ? '' : 's') : '';
+    $('#grid').innerHTML = shown.length ? shown.map(card).join('') : '<div class="msg">No ecosystems match your search.</div>';
+  }
+
+  function message(html) { $('#grid').innerHTML = '<div class="msg">' + html + '</div>'; $('#count').textContent = ''; }
+
+  $('#grid').innerHTML = new Array(6).join('<div class="card skeleton"><div class="cover"></div><div class="body"><div class="bar" style="width:70%"></div><div class="bar" style="width:40%"></div></div></div>');
+
+  listFiles().then(function (names) {
+    if (!names.length) { message('<b>No ecosystems yet.</b><br>Upload students\' downloaded ecosystem files into the <code>' + esc(folder) + '</code> folder and they will appear here.'); return; }
+    return Promise.all(names.map(readEcosystem)).then(function (res) {
+      items = res;
+      var used = {};
+      items.forEach(function (it) { if (it.biomeKey) used[it.biomeKey] = it.biome; });
+      Object.keys(used).sort(function (a, c) { return used[a].localeCompare(used[c]); }).forEach(function (k) {
+        var o = document.createElement('option'); o.value = k; o.textContent = used[k]; $('#biome').appendChild(o);
+      });
+      render();
+    });
+  }).catch(function (e) {
+    var why = {
+      norepo: 'This page could not tell which GitHub repository it lives in. Fill in <code>githubUser</code> and <code>githubRepo</code> in the settings at the top of the file, or list the files in <code>files</code>.',
+      nofolder: 'There is no <code>' + esc(folder) + '</code> folder in the repository yet. Create it and upload students\' ecosystem files there.',
+      ratelimit: 'GitHub is limiting how often this page can check the folder. Wait a few minutes and reload, or list the files in <code>files</code> in the settings.'
+    }[e.message] || 'The ecosystem list could not be loaded. Check your internet connection and reload the page.';
+    message('<b>The gallery could not load.</b><br>' + why);
+  });
+
+  ['#q', '#biome', '#sort'].forEach(function (s) { $(s).addEventListener('input', render); });
+})();
+</script>
+</body>
+</html>

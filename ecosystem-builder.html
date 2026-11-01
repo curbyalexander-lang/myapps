@@ -1,0 +1,1382 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ecosystem Builder</title>
+<script src="https://cdn.jsdelivr.net/npm/aframe@1.7.1/dist/aframe-v1.7.1.min.js"></script>
+
+<!-- ============ SHARED CODE (also copied into every exported ecosystem) ============ -->
+<script id="eco-shared">
+(function () {
+  var THREE = AFRAME.THREE;
+  var ECO = window.ECO = { images: {}, _tex: {}, _anim: [] };
+
+  ECO.PRESETS = {
+    forest:     { name: 'Temperate forest',        sky: ['#5b97d8', '#d4e8f3', '#9fb59a'], ground: '#4f6d33', fog: ['#cddfce', 0.011], hills: { type: 'hills',  color: '#3f5d2d' } },
+    rainforest: { name: 'Tropical rainforest',     sky: ['#79a8b9', '#dbe9df', '#88a58c'], ground: '#3a5626', fog: ['#bcd3c1', 0.028], hills: { type: 'hills',  color: '#2e4c21', tall: true } },
+    grassland:  { name: 'Grassland / prairie',     sky: ['#3e8fe2', '#eef2d4', '#c2c78f'], ground: '#a2ab55', fog: ['#e6eacf', 0.006], hills: { type: 'rolling', color: '#8e9a4b' } },
+    desert:     { name: 'Desert',                  sky: ['#3c8be6', '#f5dfb9', '#d8b583'], ground: '#d4ad73', fog: ['#efdab6', 0.006], hills: { type: 'mesas',  color: '#b5764a' } },
+    tundra:     { name: 'Arctic tundra',           sky: ['#8db4dc', '#eef3f8', '#d8e1e8'], ground: '#dde5ea', fog: ['#e7edf2', 0.012], hills: { type: 'mounds', color: '#c6d3de' } },
+    wetland:    { name: 'Wetland / pond',          sky: ['#5d98cc', '#e2ede7', '#a7bba4'], ground: '#5a7436', fog: ['#d2e1d8', 0.012], hills: { type: 'hills',  color: '#4a6a33' }, water: { x: 0, z: -10, r: 7, color: '#3f8094' } },
+    reef:       { name: 'Coral reef (underwater)', sky: ['#4fb0d8', '#11557e', '#062a44'], ground: '#cdb98a', fog: ['#1a6890', 0.022], hills: { type: 'reef',   color: '#8f8270' }, underwater: true },
+    plain:      { name: 'Blank meadow',            sky: ['#5a9be0', '#e8f0f6', '#b7c4a8'], ground: '#8c9e72', fog: null,               hills: { type: 'none' } }
+  };
+
+  ECO.ROLES = [
+    ['', 'Not set yet', null],
+    ['producer', 'Producer', '#3c9d4c'],
+    ['primary', 'Primary consumer (herbivore)', '#b88a00'],
+    ['secondary', 'Secondary consumer', '#d9681a'],
+    ['tertiary', 'Tertiary / apex consumer', '#c63a2f'],
+    ['omnivore', 'Omnivore', '#8f50b5'],
+    ['decomposer', 'Decomposer', '#86613f'],
+    ['abiotic', 'Nonliving (abiotic) factor', '#6f7a83']
+  ];
+  ECO.role = function (k) {
+    for (var i = 0; i < ECO.ROLES.length; i++) if (ECO.ROLES[i][0] === k) return ECO.ROLES[i];
+    return ECO.ROLES[0];
+  };
+
+  ECO.rng = function (seed) {
+    var a = seed >>> 0;
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  };
+  function hash(s) { var h = 0; s = String(s); for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; }
+
+  ECO.texture = function (key) {
+    if (ECO._tex[key]) return ECO._tex[key];
+    var url = ECO.images[key];
+    if (!url) return null;
+    var t = new THREE.TextureLoader().load(url);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 4;
+    t.userData.cached = true;
+    ECO._tex[key] = t;
+    return t;
+  };
+  function canvasTex(c) { var t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; }
+  ECO.canvasTex = canvasTex;
+
+  ECO.rr = function (x, X, Y, W, H, R) {
+    x.beginPath(); x.moveTo(X + R, Y); x.arcTo(X + W, Y, X + W, Y + H, R); x.arcTo(X + W, Y + H, X, Y + H, R);
+    x.arcTo(X, Y + H, X, Y, R); x.arcTo(X, Y, X + W, Y, R); x.closePath();
+  };
+  ECO.FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+
+  ECO.wrap = function (ctx, text, maxW) {
+    var out = [];
+    String(text).split(/\n/).forEach(function (par) {
+      if (!par.trim()) { out.push(''); return; }
+      var line = '';
+      par.split(/\s+/).forEach(function (w) {
+        var test = line ? line + ' ' + w : w;
+        if (ctx.measureText(test).width > maxW && line) { out.push(line); line = w; } else line = test;
+      });
+      if (line) out.push(line);
+    });
+    return out;
+  };
+
+  function skyCanvas(s) {
+    var c = document.createElement('canvas'); c.width = 4; c.height = 512;
+    var x = c.getContext('2d'), g = x.createLinearGradient(0, 0, 0, 512);
+    g.addColorStop(0, s[0]); g.addColorStop(0.47, s[1]); g.addColorStop(0.5, s[1]); g.addColorStop(0.56, s[2]); g.addColorStop(1, s[2]);
+    x.fillStyle = g; x.fillRect(0, 0, 4, 512); return c;
+  }
+  function noiseCanvas(col, rand) {
+    var S = 256, c = document.createElement('canvas'); c.width = c.height = S;
+    var x = c.getContext('2d'); x.fillStyle = col; x.fillRect(0, 0, S, S);
+    var base = new THREE.Color(col);
+    for (var i = 0; i < 900; i++) {
+      var cc = base.clone().offsetHSL((rand() - 0.5) * 0.03, (rand() - 0.5) * 0.08, (rand() - 0.5) * 0.1);
+      x.fillStyle = '#' + cc.getHexString(); x.globalAlpha = 0.35;
+      var px = rand() * S, py = rand() * S, r = 2 + rand() * 9;
+      for (var ox = -S; ox <= S; ox += S) for (var oy = -S; oy <= S; oy += S) { x.beginPath(); x.arc(px + ox, py + oy, r, 0, 7); x.fill(); }
+    }
+    x.globalAlpha = 1;
+    return c;
+  }
+  function addHills(g, h, rand) {
+    if (!h || h.type === 'none') return;
+    var base = new THREE.Color(h.color), n = h.type === 'mesas' ? 14 : 22;
+    for (var i = 0; i < n; i++) {
+      var a = i / n * Math.PI * 2 + rand() * 0.25, d = 58 + rand() * 22, r = 8 + rand() * 12, geo, y = 0;
+      if (h.type === 'mesas') { var hh = 6 + rand() * 10; geo = new THREE.CylinderGeometry(r * 0.75, r, hh, 7); y = hh / 2 - 0.5; }
+      else if (h.type === 'reef') { geo = new THREE.DodecahedronGeometry(r * 0.5, 0); y = r * 0.15; }
+      else {
+        var sy = h.type === 'rolling' ? 0.25 : (h.type === 'mounds' ? 0.35 : 0.5);
+        if (h.tall) sy *= 1.6;
+        geo = new THREE.SphereGeometry(r, 10, 7); geo.scale(1.4, sy, 1);
+      }
+      var c = base.clone().offsetHSL((rand() - 0.5) * 0.03, (rand() - 0.5) * 0.08, (rand() - 0.5) * 0.08);
+      var m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: c, flatShading: true }));
+      m.position.set(Math.sin(a) * d, y, -Math.cos(a) * d); m.rotation.y = rand() * 6.28; m.raycast = function () {};
+      g.add(m);
+    }
+  }
+
+  ECO.buildEnvironment = function (sceneEl, env) {
+    var root = sceneEl.object3D, old = root.getObjectByName('eco-env');
+    if (old) {
+      root.remove(old);
+      old.traverse(function (o) {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) { if (o.material.map && !o.material.map.userData.cached) o.material.map.dispose(); o.material.dispose(); }
+      });
+    }
+    ECO._anim.length = 0;
+    var g = new THREE.Group(); g.name = 'eco-env'; root.add(g);
+    var photo = env.mode === 'photo' && env.photoKey && ECO.images[env.photoKey];
+    var P = ECO.PRESETS[env.preset] || ECO.PRESETS.forest;
+
+    var skyGeo = new THREE.SphereGeometry(450, 64, 32); skyGeo.scale(-1, 1, 1);
+    var skyMat = photo
+      ? new THREE.MeshBasicMaterial({ map: ECO.texture(env.photoKey), fog: false })
+      : new THREE.MeshBasicMaterial({ map: canvasTex(skyCanvas(P.sky)), fog: false });
+    var sky = new THREE.Mesh(skyGeo, skyMat);
+    sky.rotation.y = photo ? THREE.MathUtils.degToRad(env.photoYaw || 0) : 0;
+    sky.raycast = function () {};
+    g.add(sky);
+
+    root.fog = (!photo && P.fog) ? new THREE.FogExp2(P.fog[0], P.fog[1]) : null;
+
+    var groundCol = photo ? (env.groundColor || '#6f7f5a') : P.ground;
+    g.add(new THREE.HemisphereLight(0xffffff, new THREE.Color(groundCol), 1.4));
+    var sun = new THREE.DirectionalLight(0xfff6e5, 1.6); sun.position.set(30, 60, 20); g.add(sun);
+
+    if (!photo || env.showGround) {
+      var gt = canvasTex(noiseCanvas(groundCol, ECO.rng(7)));
+      gt.wrapS = gt.wrapT = THREE.RepeatWrapping; gt.repeat.set(25, 25);
+      var ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200, 160, 160), new THREE.MeshLambertMaterial({ map: gt }));
+      ground.rotation.x = -Math.PI / 2; ground.raycast = function () {};
+      g.add(ground);
+    }
+    if (!photo) {
+      addHills(g, P.hills, ECO.rng(1234 + hash(env.preset)));
+      if (P.water) {
+        var w = new THREE.Mesh(new THREE.CircleGeometry(P.water.r, 48),
+          new THREE.MeshLambertMaterial({ color: P.water.color, transparent: true, opacity: 0.88 }));
+        w.rotation.x = -Math.PI / 2; w.position.set(P.water.x, 0.04, P.water.z); w.raycast = function () {};
+        g.add(w);
+      }
+      if (P.underwater) {
+        var surf = new THREE.Mesh(new THREE.PlaneGeometry(400, 400),
+          new THREE.MeshBasicMaterial({ color: '#8fdcf5', transparent: true, opacity: 0.25, side: THREE.DoubleSide, fog: false }));
+        surf.rotation.x = Math.PI / 2; surf.position.y = 16; surf.raycast = function () {};
+        g.add(surf);
+        var N = 700, pos = new Float32Array(N * 3), rand = ECO.rng(99);
+        for (var i = 0; i < N; i++) {
+          var a = rand() * Math.PI * 2, d = Math.sqrt(rand()) * 35;
+          pos[i * 3] = Math.cos(a) * d; pos[i * 3 + 1] = rand() * 14; pos[i * 3 + 2] = Math.sin(a) * d;
+        }
+        var pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        var pts = new THREE.Points(pg, new THREE.PointsMaterial({ color: '#ffffff', size: 0.06, transparent: true, opacity: 0.55 }));
+        pts.raycast = function () {};
+        g.add(pts);
+        ECO._anim.push(function (t) { pts.rotation.y = t * 0.00002; pts.position.y = Math.sin(t * 0.0004) * 0.3; });
+      }
+    }
+    root.traverse(function (o) { if (o.material) [].concat(o.material).forEach(function (m) { m.needsUpdate = true; }); });
+  };
+
+  function labelCanvas(text) {
+    var c = document.createElement('canvas'), x = c.getContext('2d'), fs = 56;
+    text = text.length > 40 ? text.slice(0, 39) + '…' : text;
+    x.font = '600 ' + fs + 'px ' + ECO.FONT;
+    var tw = Math.ceil(x.measureText(text).width);
+    c.width = tw + 64; c.height = 96;
+    x.font = '600 ' + fs + 'px ' + ECO.FONT;
+    x.fillStyle = 'rgba(14,26,20,0.74)'; ECO.rr(x, 2, 2, c.width - 4, c.height - 4, 44); x.fill();
+    x.fillStyle = '#ffffff'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText(text, c.width / 2, c.height / 2 + 2);
+    return c;
+  }
+  function noRay() {}
+
+  AFRAME.registerComponent('eco-sprite', {
+    schema: {
+      key: { type: 'string', default: '' }, h: { default: 1 }, aspect: { default: 1 }, flip: { default: false },
+      elev: { default: 0 }, role: { type: 'string', default: '' }, showRole: { default: true },
+      label: { type: 'string', default: '' }, showLabel: { default: true }, selected: { default: false }, bob: { default: false }
+    },
+    init: function () {
+      this.holder = new THREE.Group(); this.base = new THREE.Group();
+      this.el.setObject3D('eco-holder', this.holder); this.el.setObject3D('eco-base', this.base);
+      this.phase = Math.random() * 6.28; this._c = new THREE.Vector3(); this._m = new THREE.Vector3();
+      var g = new THREE.PlaneGeometry(1, 1); g.translate(0, 0.5, 0);
+      this.mat = new THREE.MeshBasicMaterial({ alphaTest: 0.5, side: THREE.DoubleSide });
+      this.mesh = new THREE.Mesh(g, this.mat); this.mesh.userData.el = this.el; this.mesh.el = this.el;
+      this.holder.add(this.mesh);
+    },
+    update: function (old) {
+      var d = this.data;
+      if (d.key !== old.key) { var t = ECO.texture(d.key); if (t) { this.mat.map = t; this.mat.needsUpdate = true; } }
+      var w = d.h * d.aspect;
+      this.mesh.scale.set(d.flip ? -w : w, d.h, 1);
+      this.holder.position.y = d.elev;
+
+      if (d.label !== old.label || d.h !== old.h || d.showLabel !== old.showLabel) {
+        if (this.labelMesh) { this.holder.remove(this.labelMesh); this.labelMesh.geometry.dispose(); this.labelMesh.material.map.dispose(); this.labelMesh.material.dispose(); this.labelMesh = null; }
+        if (d.showLabel && d.label) {
+          var c = labelCanvas(d.label), lh = Math.min(0.7, Math.max(0.22, 0.22 + d.h * 0.04));
+          var lm = new THREE.Mesh(new THREE.PlaneGeometry(1, 1),
+            new THREE.MeshBasicMaterial({ map: canvasTex(c), transparent: true, depthWrite: false, fog: false }));
+          lm.scale.set(lh * c.width / c.height, lh, 1); lm.position.y = d.h + lh * 0.5 + 0.1;
+          lm.renderOrder = 10; lm.userData.el = this.el; lm.el = this.el;
+          this.labelMesh = lm; this.holder.add(lm);
+        }
+      }
+
+      while (this.base.children.length) {
+        var ch = this.base.children.pop(); ch.geometry.dispose(); ch.material.dispose();
+      }
+      this.selRing = null;
+      var r = Math.min(3, Math.max(0.18, w * 0.38));
+      var shadow = new THREE.Mesh(new THREE.CircleGeometry(r * 0.9, 32),
+        new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22 * Math.max(0.3, 1 - d.elev / 10), depthWrite: false }));
+      shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.015; shadow.raycast = noRay; this.base.add(shadow);
+      var role = ECO.role(d.role);
+      if (d.showRole && role[2]) {
+        var ring = new THREE.Mesh(new THREE.RingGeometry(r * 0.82, r, 48),
+          new THREE.MeshBasicMaterial({ color: role[2], transparent: true, opacity: 0.9, depthWrite: false }));
+        ring.rotation.x = -Math.PI / 2; ring.position.y = 0.025; ring.raycast = noRay; this.base.add(ring);
+      }
+      if (d.selected) {
+        var sr = new THREE.Mesh(new THREE.RingGeometry(r * 1.08, r * 1.3, 48),
+          new THREE.MeshBasicMaterial({ color: '#2fc4f2', transparent: true, opacity: 1, depthWrite: false, fog: false }));
+        sr.rotation.x = -Math.PI / 2; sr.position.y = 0.035; sr.raycast = noRay; this.base.add(sr); this.selRing = sr;
+      }
+    },
+    tick: function (t) {
+      var cam = this.el.sceneEl.camera; if (!cam) return;
+      cam.getWorldPosition(this._c); this.el.object3D.getWorldPosition(this._m);
+      this.holder.rotation.y = Math.atan2(this._c.x - this._m.x, this._c.z - this._m.z);
+      if (this.data.bob && this.data.elev > 0.3)
+        this.holder.position.y = this.data.elev + Math.sin(t / 900 + this.phase) * Math.min(0.12, this.data.h * 0.08);
+      if (this.selRing) this.selRing.material.opacity = 0.55 + 0.45 * Math.sin(t / 220);
+    },
+    remove: function () {
+      this.el.removeObject3D('eco-holder'); this.el.removeObject3D('eco-base');
+      this.mesh.geometry.dispose(); this.mat.dispose();
+    }
+  });
+
+  AFRAME.registerComponent('eco-ambient', {
+    tick: function (t, dt) { for (var i = 0; i < ECO._anim.length; i++) ECO._anim[i](t, dt); }
+  });
+})();
+</script>
+
+<style>
+  :root {
+    --ink: #1b2620; --muted: #5d6a62; --line: #dfe3dc; --paper: #f7f6f1; --card: #ffffff;
+    --forest: #1e3a2c; --accent: #2e7d4f; --accent-ink: #ffffff; --sel: #2fc4f2; --danger: #b3382c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--ink); background: var(--paper);
+    display: grid; grid-template-rows: auto 1fr; overflow: hidden; font-size: 14px; }
+  header { background: var(--forest); color: #fff; display: flex; align-items: center; gap: 12px; padding: 10px 16px; flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+  header .sub { color: #b9cdbf; font-size: 13px; }
+  header .spacer { flex: 1; }
+  header button { background: rgba(255,255,255,.1); color: #fff; border: 1px solid rgba(255,255,255,.22); }
+  header button:hover { background: rgba(255,255,255,.2); }
+  header button.primary { background: #f2c14e; color: #1e2a20; border-color: #f2c14e; font-weight: 650; }
+  header button.primary:hover { background: #f6cf6d; }
+  button { font: inherit; border-radius: 8px; padding: 7px 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
+  button:hover { border-color: #b9c2b6; }
+  button.danger { color: var(--danger); }
+  main { display: grid; grid-template-columns: 330px minmax(0, 1fr) 300px; min-height: 0; }
+  aside { background: var(--paper); overflow-y: auto; min-height: 0; }
+  #left { border-right: 1px solid var(--line); }
+  #right { border-left: 1px solid var(--line); padding: 16px; }
+  .tabs { display: flex; position: sticky; top: 0; background: var(--paper); z-index: 2; border-bottom: 1px solid var(--line); }
+  .tabs button { flex: 1; border: 0; border-radius: 0; background: transparent; padding: 12px 8px; font-weight: 600; color: var(--muted); border-bottom: 3px solid transparent; }
+  .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+  .pane { padding: 16px; display: none; }
+  .pane.on { display: block; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 18px 0 8px; font-weight: 650; }
+  h2:first-child { margin-top: 0; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  .presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .preset { padding: 0; overflow: hidden; text-align: left; display: flex; flex-direction: column; }
+  .preset .sw { height: 46px; }
+  .preset span { padding: 6px 8px; font-size: 12.5px; font-weight: 550; }
+  .preset[aria-pressed="true"] { outline: 3px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+  .photo-card { margin-top: 10px; border: 1px dashed #b9c2b6; border-radius: 10px; padding: 12px; background: var(--card); }
+  .photo-card.on { border: 3px solid var(--accent); }
+  .photo-card img { width: 100%; height: 80px; object-fit: cover; border-radius: 6px; display: block; margin-bottom: 8px; }
+  label { display: block; font-weight: 600; font-size: 13px; margin: 12px 0 4px; }
+  label .opt { font-weight: 400; color: var(--muted); }
+  input[type=text], textarea, select { width: 100%; font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid #cdd3ca; background: #fff; color: var(--ink); }
+  textarea { resize: vertical; line-height: 1.45; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .check { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; }
+  .row output { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+  .search { margin-bottom: 8px; }
+  .cats { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .cats button { padding: 5px 10px; font-size: 12.5px; border-radius: 999px; }
+  .cats button[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .lib { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .lib button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; font-size: 11.5px; line-height: 1.2; }
+  .lib .emo { font-size: 28px; line-height: 1.1; }
+  .lib .emo-img { height: 31px; max-width: 46px; object-fit: contain; }
+  .upload { margin-top: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .upload button { width: 100%; margin-top: 8px; background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+  .list { display: flex; flex-direction: column; gap: 4px; }
+  .list button { display: flex; align-items: center; gap: 8px; text-align: left; padding: 6px 8px; }
+  .list button.on { border-color: var(--sel); box-shadow: 0 0 0 2px var(--sel) inset; }
+  .list img { width: 26px; height: 26px; object-fit: contain; }
+  .list .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  #stage { position: relative; min-height: 0; background: #9fb8c8; }
+  #stage a-scene { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #stage.dragging, #stage.dragging canvas { cursor: grabbing !important; }
+  #stage .a-fullscreen, #stage .a-enter-vr, #stage .a-enter-ar, #stage .a-orientation-modal { display: none !important; }
+  .hint { position: absolute; left: 50%; transform: translateX(-50%); bottom: 12px; background: rgba(14,26,20,.72); color: #fff; padding: 7px 12px;
+    border-radius: 999px; font-size: 12.5px; pointer-events: none; white-space: nowrap; max-width: calc(100% - 270px); overflow: hidden; text-overflow: ellipsis; }
+  .empty { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); background: rgba(255,255,255,.92); padding: 14px 18px; border-radius: 12px;
+    text-align: center; pointer-events: none; box-shadow: 0 6px 24px rgba(0,0,0,.15); }
+  .stage-tools { position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; }
+  .stage-tools button { background: rgba(255,255,255,.92); }
+  #mapbox { position: absolute; left: 10px; bottom: 10px; background: rgba(255,255,255,.94); border-radius: 12px; padding: 6px; box-shadow: 0 4px 18px rgba(0,0,0,.18); }
+  .map-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 650; color: var(--muted); padding: 0 2px 4px 4px; }
+  .map-head button { padding: 0 8px; line-height: 20px; font-size: 14px; }
+  #map { width: 220px; height: 220px; display: block; touch-action: none; cursor: grab; }
+  .popup { position: absolute; left: 0; top: 0; z-index: 6; width: 300px; max-width: calc(100% - 16px); max-height: calc(100% - 16px); overflow-y: auto;
+    background: #fff; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 12px 34px rgba(0,0,0,.28); padding: 12px 14px 14px; }
+  .popup label { margin: 9px 0 3px; }
+  .popup .btns { margin-top: 12px; }
+  .popup .insp-head input { font-weight: 650; font-size: 15px; }
+  .popup .icon { padding: 4px 9px; }
+  .behind { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 6; background: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.2); font-weight: 600; }
+  .insp-head { display: flex; gap: 10px; align-items: center; }
+  .insp-head img { width: 48px; height: 48px; object-fit: contain; background: #fff; border: 1px solid var(--line); border-radius: 8px; }
+  .insp-head h3 { margin: 0; font-size: 15px; flex: 1; }
+  .btns { display: flex; gap: 8px; margin-top: 16px; }
+  .btns button { flex: 1; }
+  .tip { background: #eef3ea; border-radius: 10px; padding: 10px 12px; margin-top: 16px; font-size: 13px; line-height: 1.45; }
+  .tip ul { margin: 6px 0 0; padding-left: 18px; }
+  #toast { position: fixed; bottom: 18px; left: 50%; transform: translate(-50%, 30px); opacity: 0; background: #1b2620; color: #fff; padding: 10px 16px;
+    border-radius: 10px; transition: .25s; z-index: 50; pointer-events: none; max-width: 90vw; }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  @media (max-width: 1050px) {
+    body { overflow: auto; height: auto; }
+    main { grid-template-columns: 1fr; }
+    #stage { height: 60vh; order: -1; }
+    #left, #right { border: 0; border-top: 1px solid var(--line); }
+    .hint { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>🌿 Ecosystem Builder</h1>
+  <span class="sub">Build an ecosystem, place its organisms, and explain how it works.</span>
+  <span class="spacer"></span>
+  <button id="b-new">New</button>
+  <button id="b-open">Open saved ecosystem</button>
+  <button id="b-preview">Preview in VR</button>
+  <button id="b-download" class="primary">Download ecosystem</button>
+</header>
+<main>
+  <aside id="left">
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-tab="env">1 · Environment</button>
+      <button role="tab" aria-selected="false" data-tab="orgs">2 · Organisms</button>
+    </div>
+    <div class="pane on" id="pane-env">
+      <h2>Choose a biome</h2>
+      <div class="presets" id="presets"></div>
+      <h2>Or use your own 360° photo</h2>
+      <div class="photo-card" id="photo-card"></div>
+    </div>
+    <div class="pane" id="pane-orgs">
+      <h2>Add organisms</h2>
+      <input type="text" class="search" id="lib-search" placeholder="Search (e.g. owl, cactus, crab)" aria-label="Search organisms">
+      <div class="cats" id="lib-cats"></div>
+      <div class="lib" id="lib-grid"></div>
+      <div class="upload">
+        <strong>Use your own image</strong>
+        <p class="muted small" style="margin:4px 0 6px">A photo or drawing of a plant or animal. PNGs with a transparent background look best.</p>
+        <label class="check small"><input type="checkbox" id="rm-bg" checked> Remove a plain background</label>
+        <button id="b-upload-org">Upload an image</button>
+      </div>
+      <h2>In your ecosystem <span id="org-count"></span></h2>
+      <label class="check small" style="margin-top:0"><input type="checkbox" id="show-roles"> Show role colors as rings on the ground</label>
+      <div class="list" id="org-list"></div>
+    </div>
+  </aside>
+
+  <section id="stage">
+    <a-scene id="scene" embedded renderer="colorManagement: true; antialias: true; logarithmicDepthBuffer: false" vr-mode-ui="enabled: false" loading-screen="enabled: false" eco-ambient>
+      <a-entity id="cam" camera="near: 0.05; far: 1000" position="0 1.6 0" look-controls="pointerLockEnabled: false" wasd-controls="acceleration: 40"></a-entity>
+    </a-scene>
+    <div class="stage-tools"><button id="b-center" title="Move back to the middle of the ecosystem">Return to center</button></div>
+    <div class="empty" id="empty">Open <b>2 · Organisms</b> and click a plant or animal to add it.</div>
+    <div id="mapbox">
+      <div class="map-head"><span>Top-down map</span><span><button id="z-in" aria-label="Zoom in">+</button> <button id="z-out" aria-label="Zoom out">−</button></span></div>
+      <canvas id="map" width="440" height="440" aria-label="Top-down map. Drag organisms to move them."></canvas>
+    </div>
+    <div id="popup" class="popup" hidden role="dialog" aria-label="Selected organism"></div>
+    <button id="behind" class="behind" hidden>The selected organism is behind you · Turn to face it</button>
+    <div class="hint">Drag the background to look · W A S D to walk · Drag an organism to move it</div>
+  </section>
+
+  <aside id="right"><div id="inspector"></div></aside>
+</main>
+
+<input type="file" id="f-org" accept="image/*" hidden>
+<input type="file" id="f-photo" accept="image/*" hidden>
+<input type="file" id="f-open" accept=".html,text/html" hidden>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<!-- ============ VIEWER TEMPLATE (copied into each exported ecosystem) ============ -->
+<script type="text/plain" id="eco-viewer-css">
+html,body{margin:0;height:100%;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#1b2620}
+#intro{position:fixed;inset:0;display:grid;place-items:center;background:rgba(10,24,18,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:20;padding:16px}
+#intro.hide{display:none}
+.card{max-width:560px;width:100%;background:#fbfaf6;border-radius:16px;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.35);max-height:90vh;overflow:auto}
+.eyebrow{text-transform:uppercase;letter-spacing:.8px;font-size:12px;color:#2e7d4f;font-weight:700;margin:0}
+.card h1{margin:6px 0 2px;font-size:28px;line-height:1.15}
+.by{color:#5d6a62;margin:0 0 12px}
+.desc{line-height:1.5;white-space:pre-wrap}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin:12px 0;font-size:13px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:11px;height:11px;border-radius:50%;display:inline-block}
+.how{background:#eef3ea;border-radius:10px;padding:10px 14px;margin:14px 0;font-size:14px;line-height:1.45}
+.how h2{font-size:13px;margin:4px 0;text-transform:uppercase;letter-spacing:.6px;color:#5d6a62}
+.how ul{margin:4px 0;padding-left:18px}
+button{font:inherit;border-radius:8px;padding:8px 14px;border:1px solid #d5dad2;background:#fff;color:#1b2620;cursor:pointer}
+button.primary{background:#2e7d4f;color:#fff;border-color:#2e7d4f;font-weight:650;padding:11px 18px;width:100%;font-size:16px}
+#hud{position:fixed;top:12px;left:12px;display:flex;gap:8px;z-index:10;flex-wrap:wrap}
+#hud button{background:rgba(255,255,255,.94);box-shadow:0 2px 10px rgba(0,0,0,.15)}
+#guide{position:fixed;top:0;right:0;bottom:0;width:min(390px,92vw);background:#fbfaf6;transform:translateX(105%);transition:transform .25s;z-index:15;overflow:auto;box-shadow:-8px 0 30px rgba(0,0,0,.2)}
+#guide.open{transform:none}
+.g-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;position:sticky;top:0;background:#fbfaf6;border-bottom:1px solid #e2e5df}
+.g-head h2{margin:0;font-size:18px}
+.g-item{padding:14px 16px;border-bottom:1px solid #e9ebe6}
+.g-top{display:flex;gap:10px;align-items:center}
+.g-top img{width:52px;height:52px;object-fit:contain;flex:none}
+.g-top h3{margin:0;font-size:16px}
+.g-top i{color:#5d6a62;font-size:13px}
+.chip{display:inline-block;color:#fff;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;margin-top:3px}
+.g-note{white-space:pre-wrap;line-height:1.45;font-size:14px;margin:8px 0}
+.g-item button{font-size:13px;padding:5px 10px}
+#hint{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);background:rgba(14,26,20,.72);color:#fff;padding:7px 14px;border-radius:999px;font-size:13px;z-index:5;pointer-events:none;white-space:nowrap}
+body.in-vr #hud,body.in-vr #guide,body.in-vr #hint{display:none}
+@media (max-width:600px){#hint{display:none}.card{padding:20px}}
+</script>
+
+<script type="text/plain" id="eco-viewer-body">
+<div id="intro" role="dialog" aria-modal="true" aria-labelledby="v-title">
+  <div class="card">
+    <p class="eyebrow">Ecosystem</p>
+    <h1 id="v-title"></h1>
+    <p class="by" id="v-author"></p>
+    <p class="desc" id="v-desc"></p>
+    <div class="legend" id="v-legend"></div>
+    <div class="how">
+      <h2>How to explore</h2>
+      <ul>
+        <li><b>Computer:</b> drag to look around, W A S D or arrow keys to walk, click an organism to read about it.</li>
+        <li><b>Phone or tablet:</b> move your device or drag to look, tap an organism.</li>
+        <li><b>VR headset:</b> press the VR button, point and pull the trigger to select, left stick to walk, right stick to turn.</li>
+      </ul>
+    </div>
+    <button class="primary" id="v-start">Explore the ecosystem</button>
+  </div>
+</div>
+<div id="hud">
+  <button id="b-about">About</button>
+  <button id="b-guide">Field guide</button>
+  <button id="b-labels" aria-pressed="true">Labels: on</button>
+</div>
+<aside id="guide" aria-label="Field guide">
+  <div class="g-head"><h2>Field guide</h2><button id="g-close">Close</button></div>
+  <div id="g-list"></div>
+</aside>
+<div id="hint">Click an organism to learn about it</div>
+<a-scene id="scene" renderer="colorManagement: true; antialias: true; logarithmicDepthBuffer: false" cursor="rayOrigin: mouse; fuse: false" raycaster="objects: .clickable; far: 200" loading-screen="enabled: false" eco-ambient>
+  <a-entity id="rig" eco-locomotion>
+    <a-entity id="cam" camera="near: 0.05; far: 1000" position="0 1.6 0" look-controls="pointerLockEnabled: false" wasd-controls="acceleration: 35"></a-entity>
+    <a-entity id="lh" laser-controls="hand: left" raycaster="objects: .clickable; far: 200"></a-entity>
+    <a-entity id="rh" laser-controls="hand: right" raycaster="objects: .clickable; far: 200"></a-entity>
+  </a-entity>
+</a-scene>
+</script>
+
+<script type="text/plain" id="eco-viewer-js">
+(function () {
+  var THREE = AFRAME.THREE, UP = new THREE.Vector3(0, 1, 0);
+
+  AFRAME.registerComponent('eco-locomotion', {
+    init: function () {
+      var self = this;
+      this.move = { x: 0, y: 0 }; this.turnReady = true;
+      this.v = new THREE.Vector3(); this.r = new THREE.Vector3(); this.cp = new THREE.Vector3();
+      this.el.sceneEl.addEventListener('loaded', function () {
+        var l = document.getElementById('lh'), r = document.getElementById('rh');
+        l.addEventListener('thumbstickmoved', function (e) { self.move.x = e.detail.x; self.move.y = e.detail.y; });
+        r.addEventListener('thumbstickmoved', function (e) {
+          var x = e.detail.x;
+          if (Math.abs(x) > 0.7 && self.turnReady) { self.turnReady = false; self.snap(x > 0 ? -1 : 1); }
+          else if (Math.abs(x) < 0.3) self.turnReady = true;
+        });
+      });
+    },
+    snap: function (dir) {
+      var rig = this.el.object3D, ang = dir * Math.PI / 6;
+      this.el.sceneEl.camera.getWorldPosition(this.cp);
+      rig.position.sub(this.cp).applyAxisAngle(UP, ang).add(this.cp);
+      rig.rotation.y += ang;
+    },
+    tick: function (t, dt) {
+      if (!this.el.sceneEl.is('vr-mode')) return;
+      var m = this.move;
+      if (Math.abs(m.x) < 0.15 && Math.abs(m.y) < 0.15) return;
+      this.el.sceneEl.camera.getWorldDirection(this.v); this.v.y = 0;
+      if (this.v.lengthSq() < 1e-6) return;
+      this.v.normalize(); this.r.set(-this.v.z, 0, this.v.x);
+      var s = 2.5 * dt / 1000;
+      this.el.object3D.position.addScaledVector(this.v, -m.y * s).addScaledVector(this.r, m.x * s);
+    }
+  });
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    var data = JSON.parse(document.getElementById('eco-data').textContent);
+    ECO.images = data.images || {};
+    var scene = document.getElementById('scene');
+    var orgs = data.organisms || [], ents = {}, labelsOn = true, panel = null, panelFor = null;
+
+    document.getElementById('v-title').textContent = data.title || 'Untitled ecosystem';
+    document.getElementById('v-author').textContent = data.author ? 'Created by ' + data.author : '';
+    document.getElementById('v-desc').textContent = data.description || '';
+    if (data.showRoles) {
+      var used = {}; orgs.forEach(function (o) { if (o.role) used[o.role] = 1; });
+      document.getElementById('v-legend').innerHTML = ECO.ROLES.filter(function (r) { return used[r[0]] && r[2]; })
+        .map(function (r) { return '<span><i class="dot" style="background:' + r[2] + '"></i>' + esc(r[1]) + '</span>'; }).join('');
+    }
+    var intro = document.getElementById('intro');
+    document.getElementById('v-start').addEventListener('click', function () { intro.classList.add('hide'); });
+    document.getElementById('b-about').addEventListener('click', function () { intro.classList.remove('hide'); });
+
+    function panelCanvas(o) {
+      var W = 1024, pad = 60, F = ECO.FONT, c = document.createElement('canvas'), x = c.getContext('2d');
+      x.font = '400 40px ' + F;
+      var body = ECO.wrap(x, o.note && o.note.trim() ? o.note.trim() : 'No notes yet.', W - pad * 2);
+      x.font = '700 66px ' + F;
+      var title = ECO.wrap(x, o.name || 'Unnamed organism', W - pad * 2);
+      var role = ECO.role(o.role);
+      var H = pad + title.length * 78 + (o.sci ? 56 : 0) + (role[2] ? 76 : 0) + 24 + body.length * 58 + 70 + pad;
+      c.width = W; c.height = H; x = c.getContext('2d');
+      x.fillStyle = 'rgba(251,250,245,0.97)'; ECO.rr(x, 6, 6, W - 12, H - 12, 36); x.fill();
+      x.lineWidth = 6; x.strokeStyle = role[2] || '#cfd6cc'; x.stroke();
+      var y = pad; x.textBaseline = 'top';
+      x.fillStyle = '#14231a'; x.font = '700 66px ' + F;
+      title.forEach(function (l) { x.fillText(l, pad, y); y += 78; });
+      if (o.sci) { x.font = 'italic 400 42px ' + F; x.fillStyle = '#4c5d52'; x.fillText(o.sci, pad, y + 4); y += 56; }
+      if (role[2]) {
+        x.font = '600 34px ' + F; var tw = x.measureText(role[1]).width;
+        x.fillStyle = role[2]; ECO.rr(x, pad, y + 12, tw + 48, 52, 26); x.fill();
+        x.fillStyle = '#fff'; x.fillText(role[1], pad + 24, y + 22); y += 76;
+      }
+      y += 24; x.font = '400 40px ' + F; x.fillStyle = '#24302a';
+      body.forEach(function (l) { x.fillText(l, pad, y); y += 58; });
+      x.font = '500 30px ' + F; x.fillStyle = '#7a857e';
+      x.fillText('Select this card or the organism again to close', pad, y + 24);
+      return c;
+    }
+    function refreshRays() {
+      [scene, document.getElementById('lh'), document.getElementById('rh')].forEach(function (el) {
+        var rc = el && el.components && el.components.raycaster; if (rc) rc.refreshObjects();
+      });
+    }
+    function closePanel() { if (panel) { panel.parentNode.removeChild(panel); panel = null; panelFor = null; setTimeout(refreshRays, 0); } }
+    function openPanel(o) {
+      if (panelFor === o.id) { closePanel(); return; }
+      closePanel();
+      var c = panelCanvas(o), tex = ECO.canvasTex(c); tex.anisotropy = 8;
+      var w = 1.5, h = w * c.height / c.width;
+      var mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h),
+        new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, fog: false }));
+      mesh.renderOrder = 999;
+      // Pop the card up right beside the organism, facing the visitor, and scale it
+      // with distance so it is just as readable for far-away organisms.
+      var cp = new THREE.Vector3(); scene.camera.getWorldPosition(cp);
+      var elev = o.elev || 0, op = new THREE.Vector3(o.x, elev + o.h * 0.55, o.z);
+      var toCam = new THREE.Vector3(cp.x - op.x, 0, cp.z - op.z), dist = toCam.length();
+      if (dist < 1e-3) toCam.set(0, 0, 1); toCam.normalize();
+      var right = new THREE.Vector3(toCam.z, 0, -toCam.x);
+      var look = new THREE.Vector3(); scene.camera.getWorldDirection(look);
+      var u = new THREE.Vector3(op.x - cp.x, 0, op.z - cp.z);
+      var side = (look.x * u.z - look.z * u.x) > 0 ? -1 : 1;
+      var s = Math.max(0.55, Math.min(5, dist / 2.4));
+      var pos = op.clone()
+        .addScaledVector(toCam, Math.min(0.8, dist * 0.35))
+        .addScaledVector(right, side * (o.h * o.aspect * 0.5 + w * s * 0.5 + 0.15));
+      pos.y = Math.max(pos.y, h * s * 0.5 + 0.05);
+      panel = document.createElement('a-entity');
+      panel.classList.add('clickable');
+      panel.setAttribute('position', { x: pos.x, y: pos.y, z: pos.z });
+      panel.setAttribute('scale', { x: s, y: s, z: s });
+      panel.setAttribute('rotation', { x: 0, y: THREE.MathUtils.radToDeg(Math.atan2(cp.x - pos.x, cp.z - pos.z)), z: 0 });
+      scene.appendChild(panel);
+      panel.setObject3D('mesh', mesh);
+      panel.addEventListener('click', closePanel);
+      panelFor = o.id;
+      setTimeout(refreshRays, 0); setTimeout(refreshRays, 200);
+    }
+
+    function addOrg(o) {
+      var el = document.createElement('a-entity');
+      el.classList.add('clickable');
+      el.setAttribute('position', { x: o.x, y: 0, z: o.z });
+      el.setAttribute('eco-sprite', { key: o.img, h: o.h, aspect: o.aspect, flip: !!o.flip, elev: o.elev || 0, role: o.role || '',
+        showRole: !!data.showRoles, label: o.name || '', showLabel: labelsOn, bob: true });
+      el.addEventListener('click', function () { openPanel(o); });
+      scene.appendChild(el); ents[o.id] = el;
+    }
+
+    var guide = document.getElementById('guide');
+    document.getElementById('g-list').innerHTML = orgs.length ? orgs.map(function (o) {
+      var r = ECO.role(o.role);
+      return '<div class="g-item"><div class="g-top"><img alt="" src="' + (ECO.images[o.img] || '') + '"><div><h3>' + esc(o.name || 'Unnamed organism') + '</h3>' +
+        (o.sci ? '<i>' + esc(o.sci) + '</i><br>' : '') + (r[2] ? '<span class="chip" style="background:' + r[2] + '">' + esc(r[1]) + '</span>' : '') +
+        '</div></div><p class="g-note">' + esc(o.note || 'No notes yet.') + '</p><button data-id="' + esc(o.id) + '">Show in the scene</button></div>';
+    }).join('') : '<p style="padding:16px">This ecosystem has no organisms yet.</p>';
+    document.getElementById('g-list').addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-id]'); if (!b) return;
+      var o = orgs.filter(function (x) { return x.id === b.dataset.id; })[0];
+      guide.classList.remove('open'); panelFor = null;
+      if (!o) return;
+      var lc = document.getElementById('cam').components['look-controls'];
+      if (lc && !scene.is('vr-mode')) {
+        var p = new THREE.Vector3(); scene.camera.getWorldPosition(p);
+        lc.yawObject.rotation.y = Math.atan2(-(o.x - p.x), -(o.z - p.z)); lc.pitchObject.rotation.x = 0;
+        scene.camera.updateMatrixWorld(true);
+      }
+      setTimeout(function () { openPanel(o); }, 50);
+    });
+    document.getElementById('b-guide').addEventListener('click', function () { guide.classList.toggle('open'); });
+    document.getElementById('g-close').addEventListener('click', function () { guide.classList.remove('open'); });
+    var lb = document.getElementById('b-labels');
+    lb.addEventListener('click', function () {
+      labelsOn = !labelsOn; lb.textContent = 'Labels: ' + (labelsOn ? 'on' : 'off'); lb.setAttribute('aria-pressed', labelsOn);
+      Object.keys(ents).forEach(function (k) { ents[k].setAttribute('eco-sprite', 'showLabel', labelsOn); });
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { closePanel(); guide.classList.remove('open'); }
+    });
+    scene.addEventListener('enter-vr', function () { document.body.classList.add('in-vr'); intro.classList.add('hide'); guide.classList.remove('open'); });
+    scene.addEventListener('exit-vr', function () { document.body.classList.remove('in-vr'); });
+
+    function go() {
+      ECO.buildEnvironment(scene, data.env || {}); orgs.forEach(addOrg);
+      refreshRays(); setTimeout(refreshRays, 300); setTimeout(refreshRays, 1500);
+    }
+    if (scene.hasLoaded) go(); else scene.addEventListener('loaded', go);
+  });
+})();
+</script>
+
+<!-- ============ BUILDER ============ -->
+<script>
+(function () {
+  var THREE = AFRAME.THREE;
+  var $ = function (s) { return document.querySelector(s); };
+  var sceneEl = $('#scene'), camEl = $('#cam');
+
+  // emoji, name, category, default height (m), default elevation (m), default role
+  var LIB = [
+    ['🌳','Deciduous tree','plant',6], ['🌲','Evergreen tree','plant',8], ['🌴','Palm tree','plant',7], ['🌵','Cactus','plant',2.5],
+    ['🎋','Bamboo','plant',4], ['🌾','Grass','plant',0.7], ['🌿','Fern','plant',0.8], ['☘️','Clover','plant',0.25],
+    ['🌱','Seedling','plant',0.3], ['🌻','Sunflower','plant',1.6], ['🌼','Wildflower','plant',0.4], ['🌸','Blossom','plant',0.5],
+    ['🌺','Hibiscus','plant',1.2], ['🌷','Tulip','plant',0.4], ['🪻','Hyacinth','plant',0.45], ['🪷','Lotus','plant',0.5],
+    ['🌽','Corn','plant',2.2],
+    ['🦌','Deer','animal',1.6], ['🐻','Bear','animal',1.5], ['🐺','Wolf','animal',1.0], ['🦊','Fox','animal',0.6],
+    ['🐇','Rabbit','animal',0.35], ['🐿️','Squirrel','animal',0.3], ['🦔','Hedgehog','animal',0.25], ['🦝','Raccoon','animal',0.5],
+    ['🦨','Skunk','animal',0.4], ['🦫','Beaver','animal',0.5], ['🦡','Badger','animal',0.4], ['🐁','Mouse','animal',0.12],
+    ['🦬','Bison','animal',1.8], ['🐪','Camel','animal',2.1], ['🦁','Lion','animal',1.2], ['🐅','Tiger','animal',1.1],
+    ['🐆','Leopard','animal',0.9], ['🦓','Zebra','animal',1.5], ['🦒','Giraffe','animal',5], ['🐘','Elephant','animal',3.2],
+    ['🦏','Rhinoceros','animal',1.7], ['🦛','Hippopotamus','animal',1.5], ['🦘','Kangaroo','animal',1.5], ['🐒','Monkey','animal',0.6,3],
+    ['🦍','Gorilla','animal',1.6], ['🦥','Sloth','animal',0.6,4], ['🐻‍❄️','Polar bear','animal',1.6], ['🐧','Penguin','animal',0.8],
+    ['🦭','Seal','animal',0.6], ['🦉','Owl','animal',0.5,4], ['🦅','Eagle','animal',0.9,9], ['🐦','Songbird','animal',0.25,3],
+    ['🦜','Parrot','animal',0.5,5], ['🦆','Duck','animal',0.5], ['🦢','Swan','animal',0.9], ['🦩','Flamingo','animal',1.3],
+    ['🦇','Bat','animal',0.35,4], ['🐸','Frog','animal',0.15], ['🐍','Snake','animal',0.4], ['🦎','Lizard','animal',0.25],
+    ['🐢','Turtle','animal',0.3], ['🐊','Alligator','animal',0.8], ['🐝','Bee','animal',0.12,1], ['🦋','Butterfly','animal',0.15,1.2],
+    ['🐛','Caterpillar','animal',0.08], ['🐞','Ladybug','animal',0.06], ['🐜','Ant','animal',0.05], ['🪲','Beetle','animal',0.08],
+    ['🦗','Cricket','animal',0.08], ['🕷️','Spider','animal',0.08], ['🦂','Scorpion','animal',0.12], ['🐌','Snail','animal',0.08],
+    ['🪱','Earthworm','animal',0.06],
+    ['🐟','Fish','water',0.4,2], ['🐠','Tropical fish','water',0.3,2], ['🐡','Pufferfish','water',0.3,2], ['🦈','Shark','water',2.5,4],
+    ['🐋','Whale','water',6,6], ['🐬','Dolphin','water',2,3], ['🐙','Octopus','water',0.6], ['🦑','Squid','water',0.6,3],
+    ['🪼','Jellyfish','water',0.5,4], ['🦀','Crab','water',0.2], ['🦞','Lobster','water',0.3], ['🦐','Shrimp','water',0.1,0.5],
+    ['🪸','Coral','water',0.8], ['🦦','Otter','water',0.6],
+    ['🍄','Mushroom','other',0.3], ['🦠','Bacteria','other',0.3], ['🪨','Rock','other',0.8,0,'abiotic'],
+    ['🪵','Log','other',0.6,0,'abiotic'], ['💧','Water source','other',0.5,0,'abiotic'], ['☀️','Sunlight','other',2,12,'abiotic'],
+    ['🪺','Nest','other',0.3]
+  ].map(function (a) { return { e: a[0], n: a[1], c: a[2], h: a[3], elev: a[4] || 0, role: a[5] || '' }; });
+  // Full-body artwork for animals whose emoji show only a head
+  var ART = (function () {
+    function svg(vb, body) { return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="' + vb + '">' + body + '</svg>'; }
+  
+    function bear(c, polar) {
+      var head = polar
+        ? '<path d="M82 64 C70 52 52 52 38 60 C28 64 18 70 12 76 C8 80 10 86 16 88 L40 92 C54 96 70 94 82 86 Z" fill="' + c.main + '"/>' +
+          '<circle cx="66" cy="58" r="8" fill="' + c.main + '"/><circle cx="66" cy="58" r="4" fill="' + c.dark + '"/>' +
+          '<ellipse cx="13" cy="79" rx="6" ry="5" fill="#1d1d1f"/><circle cx="44" cy="70" r="3.4" fill="#1d1d1f"/>' +
+          '<path d="M14 88 Q26 92 36 89" stroke="#1d1d1f" stroke-width="2.4" fill="none" stroke-linecap="round"/>'
+        : '<circle cx="56" cy="70" r="28" fill="' + c.main + '"/>' +
+          '<circle cx="62" cy="44" r="10" fill="' + c.main + '"/><circle cx="62" cy="44" r="5" fill="' + c.paw + '"/>' +
+          '<ellipse cx="32" cy="80" rx="18" ry="13" fill="' + c.muzzle + '"/>' +
+          '<ellipse cx="18" cy="75" rx="7" ry="5.5" fill="#24170e"/><circle cx="48" cy="63" r="3.6" fill="#24170e"/>' +
+          '<path d="M22 88 Q30 92 38 88" stroke="#24170e" stroke-width="2.5" fill="none" stroke-linecap="round"/>';
+      return svg('0 0 240 160',
+        '<rect x="80" y="92" width="22" height="52" rx="10" fill="' + c.dark + '"/>' +
+        '<rect x="170" y="92" width="22" height="52" rx="10" fill="' + c.dark + '"/>' +
+        '<circle cx="212" cy="72" r="9" fill="' + c.dark + '"/>' +
+        '<path d="M62 80 C62 46 100 28 140 32 C176 28 212 46 212 84 C212 110 190 120 150 120 L100 120 C74 120 62 106 62 80Z" fill="' + c.main + '"/>' +
+        '<path d="M100 42 C126 28 160 30 180 42 C152 38 126 40 100 48Z" fill="' + c.hi + '"/>' +
+        '<rect x="64" y="96" width="24" height="54" rx="11" fill="' + c.main + '"/>' +
+        '<rect x="150" y="96" width="24" height="54" rx="11" fill="' + c.main + '"/>' +
+        '<rect x="60" y="141" width="32" height="12" rx="6" fill="' + c.paw + '"/>' +
+        '<rect x="146" y="141" width="32" height="12" rx="6" fill="' + c.paw + '"/>' +
+        '<rect x="77" y="136" width="28" height="10" rx="5" fill="' + c.paw + '"/>' +
+        '<rect x="167" y="136" width="28" height="10" rx="5" fill="' + c.paw + '"/>' +
+        head);
+    }
+  
+    function canine(c) {
+      var legs = function (x, y, h, fill) {
+        return '<rect x="' + x + '" y="' + y + '" width="13" height="' + h + '" rx="6" fill="' + fill + '"/>' +
+          (c.sock ? '<rect x="' + x + '" y="' + (y + h - 20) + '" width="13" height="20" rx="6" fill="' + c.sock + '"/>' : '') +
+          '<ellipse cx="' + (x + 5) + '" cy="' + (y + h - 2) + '" rx="10" ry="5" fill="' + (c.sock || c.dark) + '"/>';
+      };
+      return svg('0 0 250 160',
+        legs(86, 90, 54, c.dark) + legs(178, 88, 56, c.dark) +
+        '<path d="M196 66 C222 62 244 80 244 108 C236 100 224 98 212 94 C204 86 198 78 190 76Z" fill="' + c.main + '"/>' +
+        '<path d="M244 108 C238 98 230 96 222 96 C230 100 238 104 244 108Z" fill="' + c.tip + '"/>' +
+        '<path d="M226 90 C234 92 242 98 244 108 C236 104 228 100 220 98Z" fill="' + c.tip + '"/>' +
+        '<path d="M72 70 C80 52 112 48 142 50 C172 48 198 54 202 74 C204 92 188 102 162 104 L106 104 C86 104 70 92 72 70Z" fill="' + c.main + '"/>' +
+        '<path d="M98 98 C122 108 152 108 180 98 C162 104 122 106 98 98Z" fill="' + c.light + '"/>' +
+        legs(96, 94, 58, c.main) + legs(186, 92, 60, c.main) +
+        '<path d="M62 58 C66 74 76 86 92 92 L104 64 C94 54 80 48 68 46Z" fill="' + c.main + '"/>' +
+        '<path d="M64 62 C68 76 76 84 88 90 C80 80 74 70 70 60Z" fill="' + c.light + '"/>' +
+        '<path d="M90 48 C86 34 74 28 62 30 C48 32 36 38 28 44 L12 50 C8 53 10 58 16 59 L40 62 C52 68 68 70 80 66 Z" fill="' + c.main + '"/>' +
+        '<path d="M14 58 L40 62 C50 66 62 68 72 66 C58 70 42 70 30 66 Z" fill="' + c.light + '"/>' +
+        '<path d="M58 34 L62 12 L76 32Z" fill="' + c.main + '"/><path d="M62 30 L64 18 L71 31Z" fill="' + c.ear + '"/>' +
+        '<path d="M70 34 L78 14 L88 36Z" fill="' + c.dark + '"/>' +
+        '<ellipse cx="11" cy="52" rx="5" ry="4" fill="#1e1a18"/>' +
+        '<path d="M40 41 Q46 37 52 41" stroke="#1e1a18" stroke-width="3.2" fill="none" stroke-linecap="round"/>');
+    }
+  
+    function lion() {
+      var c = { main: '#d9a45b', dark: '#b98440', light: '#efcf94', mane: '#9c5a22', maneHi: '#b86f2c' };
+      return svg('0 0 250 160',
+        '<rect x="84" y="92" width="16" height="52" rx="7" fill="' + c.dark + '"/>' +
+        '<rect x="180" y="90" width="16" height="54" rx="7" fill="' + c.dark + '"/>' +
+        '<path d="M200 72 C226 76 232 100 238 118" stroke="' + c.main + '" stroke-width="6" fill="none" stroke-linecap="round"/>' +
+        '<ellipse cx="238" cy="122" rx="7" ry="10" fill="' + c.mane + '"/>' +
+        '<path d="M70 72 C76 52 110 48 142 50 C174 48 202 54 204 76 C206 94 190 104 164 106 L104 106 C84 106 68 94 70 72Z" fill="' + c.main + '"/>' +
+        '<path d="M98 100 C124 110 154 110 182 100 C162 106 122 108 98 100Z" fill="' + c.light + '"/>' +
+        '<rect x="96" y="96" width="17" height="56" rx="8" fill="' + c.main + '"/>' +
+        '<rect x="186" y="94" width="17" height="58" rx="8" fill="' + c.main + '"/>' +
+        '<ellipse cx="102" cy="150" rx="12" ry="5" fill="' + c.dark + '"/><ellipse cx="192" cy="150" rx="12" ry="5" fill="' + c.dark + '"/>' +
+        '<ellipse cx="92" cy="142" rx="11" ry="5" fill="' + c.dark + '"/><ellipse cx="186" cy="142" rx="11" ry="5" fill="' + c.dark + '"/>' +
+        '<path d="M58 30 C80 14 108 24 112 50 C116 72 108 92 90 100 C72 106 50 100 40 84 C30 66 38 42 58 30Z" fill="' + c.mane + '"/>' +
+        '<path d="M66 34 C84 26 102 34 104 52 C92 42 78 38 66 34Z" fill="' + c.maneHi + '"/>' +
+        '<path d="M76 50 C70 40 56 38 44 44 C34 50 26 56 18 62 C14 66 16 72 22 74 L44 78 C58 82 72 78 80 68 Z" fill="' + c.main + '"/>' +
+        '<path d="M20 72 L44 78 C54 80 64 78 70 74 C58 84 40 84 26 80Z" fill="' + c.light + '"/>' +
+        '<ellipse cx="19" cy="64" rx="5.5" ry="4.5" fill="#4a2c1a"/>' +
+        '<path d="M40 56 Q46 52 52 56" stroke="#2a1a10" stroke-width="3.2" fill="none" stroke-linecap="round"/>' +
+        '<circle cx="64" cy="42" r="7" fill="' + c.main + '"/><circle cx="64" cy="42" r="3.5" fill="' + c.dark + '"/>');
+    }
+  
+    function penguin() {
+      return svg('0 0 130 170',
+        '<ellipse cx="44" cy="160" rx="16" ry="7" fill="#f2a12e"/><ellipse cx="86" cy="160" rx="16" ry="7" fill="#f2a12e"/>' +
+        '<path d="M22 70 C8 92 6 118 14 132 C22 120 28 100 30 82Z" fill="#20262f"/>' +
+        '<path d="M108 70 C122 92 124 118 116 132 C108 120 102 100 100 82Z" fill="#20262f"/>' +
+        '<path d="M65 6 C96 6 108 36 108 70 C110 112 102 156 65 156 C28 156 20 112 22 70 C22 36 34 6 65 6Z" fill="#20262f"/>' +
+        '<path d="M65 52 C88 52 96 80 96 104 C96 134 86 150 65 150 C44 150 34 134 34 104 C34 80 42 52 65 52Z" fill="#f8f8f4"/>' +
+        '<path d="M40 34 C44 24 54 22 58 30 C56 38 48 42 40 34Z" fill="#f8f8f4"/>' +
+        '<path d="M90 34 C86 24 76 22 72 30 C74 38 82 42 90 34Z" fill="#f8f8f4"/>' +
+        '<circle cx="51" cy="31" r="4" fill="#111"/><circle cx="79" cy="31" r="4" fill="#111"/>' +
+        '<path d="M56 42 L74 42 L65 56Z" fill="#f2a12e"/>' +
+        '<path d="M50 56 C56 62 74 62 80 56 C76 66 54 66 50 56Z" fill="#f5c84c" opacity=".7"/>');
+    }
+  
+    function songbird() {
+      return svg('0 0 170 140',
+        '<path d="M76 104 L72 126 M90 104 L94 126" stroke="#6b4a2b" stroke-width="3.5" stroke-linecap="round"/>' +
+        '<path d="M64 126 L80 126 M86 126 L102 126" stroke="#6b4a2b" stroke-width="3" stroke-linecap="round"/>' +
+        '<path d="M118 72 L162 56 L160 72 L122 88Z" fill="#2d64ad"/>' +
+        '<ellipse cx="84" cy="74" rx="44" ry="32" fill="#3f7fd0"/>' +
+        '<ellipse cx="68" cy="84" rx="28" ry="22" fill="#e5853c"/>' +
+        '<path d="M80 58 C104 50 128 62 134 82 C112 84 92 78 78 68Z" fill="#2d64ad"/>' +
+        '<path d="M92 70 C108 70 120 76 126 82 M96 76 C110 77 118 80 124 84" stroke="#244f8a" stroke-width="2" fill="none"/>' +
+        '<circle cx="52" cy="46" r="22" fill="#3f7fd0"/>' +
+        '<path d="M32 42 L14 48 L32 54Z" fill="#e3b23c"/>' +
+        '<circle cx="46" cy="42" r="4.2" fill="#111"/><circle cx="47.5" cy="40.5" r="1.4" fill="#fff"/>');
+    }
+  
+    function frog() {
+      return svg('0 0 180 125',
+        '<path d="M110 104 L160 108 C166 110 166 116 160 118 L104 116Z" fill="#3f8428"/>' +
+        '<path d="M30 72 C30 46 60 32 92 36 C124 38 150 54 152 78 C154 98 132 106 102 106 L62 106 C42 106 30 92 30 72Z" fill="#5aa83a"/>' +
+        '<path d="M44 96 C70 108 110 108 138 96 C122 106 70 108 44 96Z" fill="#b6d97a"/>' +
+        '<path d="M108 66 C138 58 162 80 154 100 C146 112 124 110 104 104 C98 90 100 76 108 66Z" fill="#4a9230"/>' +
+        '<circle cx="96" cy="52" r="6" fill="#3f8428"/><circle cx="120" cy="60" r="5" fill="#3f8428"/><circle cx="78" cy="44" r="4" fill="#3f8428"/>' +
+        '<path d="M52 86 L42 112 C40 116 46 118 50 116 L62 92Z" fill="#4a9230"/>' +
+        '<path d="M36 116 L58 116" stroke="#3f8428" stroke-width="5" stroke-linecap="round"/>' +
+        '<circle cx="56" cy="38" r="15" fill="#5aa83a"/>' +
+        '<circle cx="56" cy="37" r="10" fill="#f3d34a"/><ellipse cx="56" cy="37" rx="6" ry="4" fill="#111"/>' +
+        '<path d="M26 66 Q52 78 86 68" stroke="#2f5f1d" stroke-width="2.6" fill="none" stroke-linecap="round"/>' +
+        '<circle cx="34" cy="58" r="2" fill="#2f5f1d"/>');
+    }
+  
+    return {
+      'Bear': bear({ main: '#8a5a2e', dark: '#6e4521', hi: '#a06b39', muzzle: '#b98a5c', paw: '#5c3a1c' }),
+      'Polar bear': bear({ main: '#f3efe4', dark: '#d9d2c0', hi: '#ffffff', muzzle: '#e9e3d3', paw: '#cfc7b3' }, true),
+      'Wolf': canine({ main: '#8d9198', dark: '#6b7078', light: '#e3e1dc', tip: '#4c5058', ear: '#5c6068' }),
+      'Fox': canine({ main: '#e8742a', dark: '#b8541a', light: '#fbf3e8', tip: '#fbf3e8', ear: '#3a2a22', sock: '#3a2a22' }),
+      'Lion': lion(),
+      'Penguin': penguin(),
+      'Songbird': songbird(),
+      'Frog': frog()
+    };
+  })();
+  LIB.forEach(function (i) { if (ART[i.n]) i.svg = ART[i.n]; });
+  function svgUrl(s) { return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s); }
+  var CATS = [['plant', 'Plants'], ['animal', 'Animals'], ['water', 'Water life'], ['other', 'Fungi & nonliving']];
+
+  function blankState() {
+    return { version: 1, title: '', author: '', description: '',
+      env: { mode: 'preset', preset: 'forest', photoKey: '', photoYaw: 0, showGround: false, groundColor: '#6f7f5a' },
+      showRoles: true, images: {}, organisms: [] };
+  }
+  var state = blankState(), sel = null, ents = new Map(), imgEls = {}, libTab = 'plant', libQuery = '';
+  ECO.images = state.images;
+
+  function uid() { return 'o' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function byId(id) { for (var i = 0; i < state.organisms.length; i++) if (state.organisms[i].id === id) return state.organisms[i]; return null; }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  var toastT;
+  function toast(msg) { var t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove('show'); }, 3200); }
+
+  // ---------- autosave (IndexedDB, best effort) ----------
+  var DB = {
+    open: function () { return new Promise(function (res, rej) { var r = indexedDB.open('ecosystem-builder', 1); r.onupgradeneeded = function () { r.result.createObjectStore('kv'); }; r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); }; }); },
+    get: function (k) { return this.open().then(function (db) { return new Promise(function (res, rej) { var q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = function () { res(q.result); }; q.onerror = function () { rej(q.error); }; }); }).catch(function () { return null; }); },
+    set: function (k, v) { return this.open().then(function (db) { return new Promise(function (res) { var tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = res; tx.onerror = res; }); }).catch(function () {}); }
+  };
+  var saveT;
+  function scheduleSave() { clearTimeout(saveT); saveT = setTimeout(function () { DB.set('current', JSON.parse(JSON.stringify(state))); }, 600); }
+
+  // ---------- image helpers ----------
+  var WEBP = (function () { try { return document.createElement('canvas').toDataURL('image/webp').indexOf('data:image/webp') === 0; } catch (e) { return false; } })();
+  function encode(c) { return WEBP ? c.toDataURL('image/webp', 0.9) : c.toDataURL('image/png'); }
+  function trim(c) {
+    var x = c.getContext('2d'), d = x.getImageData(0, 0, c.width, c.height).data, W = c.width, H = c.height;
+    var x0 = W, y0 = H, x1 = -1, y1 = -1;
+    for (var y = 0; y < H; y++) for (var i = 0; i < W; i++) if (d[(y * W + i) * 4 + 3] > 16) { if (i < x0) x0 = i; if (i > x1) x1 = i; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (x1 < 0) return null;
+    x0 = Math.max(0, x0 - 2); y0 = Math.max(0, y0 - 2); x1 = Math.min(W - 1, x1 + 2); y1 = Math.min(H - 1, y1 + 2);
+    var o = document.createElement('canvas'); o.width = x1 - x0 + 1; o.height = y1 - y0 + 1;
+    o.getContext('2d').drawImage(c, x0, y0, o.width, o.height, 0, 0, o.width, o.height);
+    return { canvas: o, aspect: o.width / o.height };
+  }
+  function bakeEmoji(e) {
+    var S = 256, c = document.createElement('canvas'); c.width = c.height = S;
+    var x = c.getContext('2d'); x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.font = Math.round(S * 0.8) + 'px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Segoe UI Symbol",sans-serif';
+    x.fillText(e, S / 2, S / 2 + S * 0.04);
+    var t = trim(c); if (!t) return null;
+    return { url: encode(t.canvas), aspect: t.aspect };
+  }
+  function bakeSvg(s) {
+    return new Promise(function (res) {
+      var img = new Image();
+      img.onload = function () {
+        var S = 512, k = S / Math.max(img.naturalWidth || S, img.naturalHeight || S);
+        var c = document.createElement('canvas'); c.width = Math.round((img.naturalWidth || S) * k); c.height = Math.round((img.naturalHeight || S) * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        var t = trim(c); res(t ? { url: encode(t.canvas), aspect: t.aspect } : null);
+      };
+      img.onerror = function () { res(null); };
+      img.src = svgUrl(s);
+    });
+  }
+  function removeBackground(c) {
+    var x = c.getContext('2d'), img = x.getImageData(0, 0, c.width, c.height), d = img.data, W = c.width, H = c.height;
+    var sr = d[0], sg = d[1], sb = d[2], tol = 70, seen = new Uint8Array(W * H), stack = [];
+    for (var i = 0; i < W; i++) { stack.push(i, (H - 1) * W + i); }
+    for (var j = 0; j < H; j++) { stack.push(j * W, j * W + W - 1); }
+    while (stack.length) {
+      var p = stack.pop(); if (seen[p]) continue; seen[p] = 1;
+      var k = p * 4;
+      if (d[k + 3] < 10 || Math.abs(d[k] - sr) + Math.abs(d[k + 1] - sg) + Math.abs(d[k + 2] - sb) < tol) {
+        d[k + 3] = 0;
+        var px = p % W, py = (p - px) / W;
+        if (px > 0) stack.push(p - 1); if (px < W - 1) stack.push(p + 1);
+        if (py > 0) stack.push(p - W); if (py < H - 1) stack.push(p + W);
+      }
+    }
+    x.putImageData(img, 0, 0);
+  }
+  function loadImageFile(file) {
+    return new Promise(function (res, rej) {
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () { res(img); setTimeout(function () { URL.revokeObjectURL(url); }, 1000); };
+      img.onerror = function () { URL.revokeObjectURL(url); rej(new Error('bad image')); };
+      img.src = url;
+    });
+  }
+  function getImg(key) {
+    if (!imgEls[key] && state.images[key]) { imgEls[key] = new Image(); imgEls[key].src = state.images[key]; }
+    return imgEls[key];
+  }
+
+  // ---------- scene sync ----------
+  function sync(org) {
+    var el = ents.get(org.id);
+    if (!el) { el = document.createElement('a-entity'); el.dataset.id = org.id; sceneEl.appendChild(el); ents.set(org.id, el); }
+    el.setAttribute('position', { x: org.x, y: 0, z: org.z });
+    el.setAttribute('eco-sprite', { key: org.img, h: org.h, aspect: org.aspect, flip: !!org.flip, elev: org.elev || 0, role: org.role || '',
+      showRole: !!state.showRoles, label: org.name || '', showLabel: true, selected: org.id === sel });
+  }
+  function unsync(id) { var el = ents.get(id); if (el) { el.parentNode.removeChild(el); ents.delete(id); } }
+  function rebuildEnv() { ECO.buildEnvironment(sceneEl, state.env); renderEnvPanel(); scheduleSave(); }
+  function rebuildAll() {
+    ents.forEach(function (el) { el.parentNode.removeChild(el); }); ents.clear();
+    sel = null; ECO.images = state.images; ECO._tex = {}; imgEls = {};
+    rebuildEnv();
+    state.organisms.forEach(sync);
+    renderAll(); renderInfo();
+  }
+
+  function addOrganism(o) {
+    var cam = sceneEl.camera, p = new THREE.Vector3(), d = new THREE.Vector3();
+    cam.getWorldPosition(p); cam.getWorldDirection(d); d.y = 0;
+    if (d.lengthSq() < 1e-4) d.set(0, 0, -1); d.normalize();
+    d.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * 1.1);
+    var dist = Math.max(3, Math.min(14, o.h * 1.3 + 2)) * (0.85 + Math.random() * 0.4);
+    var org = { id: uid(), name: o.name, sci: '', role: o.role || '', note: '', img: o.key, aspect: o.aspect, h: o.h, elev: o.elev || 0, flip: false,
+      x: +(p.x + d.x * dist).toFixed(2), z: +(p.z + d.z * dist).toFixed(2) };
+    state.organisms.push(org); sel = org.id;
+    state.organisms.forEach(sync); renderAll(); scheduleSave();
+    return org;
+  }
+  function addFromLibrary(item) {
+    if (item.svg) {
+      var skey = 'a:' + item.n.toLowerCase().replace(/[^a-z]+/g, '-') + ':1';
+      var ex0 = state.organisms.filter(function (o) { return o.img === skey; })[0];
+      if (state.images[skey] && ex0) { addOrganism({ name: item.n, key: skey, aspect: ex0.aspect, h: item.h, elev: item.elev, role: item.role }); return; }
+      bakeSvg(item.svg).then(function (b) {
+        if (!b) { toast('That picture could not be drawn. Try uploading an image instead.'); return; }
+        state.images[skey] = b.url;
+        addOrganism({ name: item.n, key: skey, aspect: b.aspect, h: item.h, elev: item.elev, role: item.role });
+      });
+      return;
+    }
+    var key = 'e:' + Array.from(item.e).map(function (c) { return c.codePointAt(0).toString(16); }).join('-');
+    var aspect;
+    if (!state.images[key]) {
+      var b = bakeEmoji(item.e);
+      if (!b) { toast('This device could not draw that picture. Try uploading an image instead.'); return; }
+      state.images[key] = b.url; aspect = b.aspect;
+    } else {
+      var ex = state.organisms.filter(function (o) { return o.img === key; })[0];
+      aspect = ex ? ex.aspect : (bakeEmoji(item.e) || { aspect: 1 }).aspect;
+    }
+    addOrganism({ name: item.n, key: key, aspect: aspect, h: item.h, elev: item.elev, role: item.role });
+  }
+  function select(id) {
+    if (sel === id) return;
+    var prev = sel; sel = id;
+    [prev, id].forEach(function (k) { var o = k && byId(k); if (o) sync(o); });
+    renderPopup(); renderList();
+  }
+  function removeOrganism(id) {
+    var o = byId(id); if (!o) return;
+    state.organisms = state.organisms.filter(function (x) { return x.id !== id; });
+    unsync(id);
+    if (o.img.indexOf('u') === 0 && !state.organisms.some(function (x) { return x.img === o.img; })) { delete state.images[o.img]; delete ECO._tex[o.img]; }
+    if (sel === id) sel = null;
+    renderAll(); scheduleSave();
+  }
+
+  // ---------- panels ----------
+  function renderAll() { renderLibrary(); renderList(); renderPopup(); renderEnvPanel(); $('#empty').style.display = state.organisms.length ? 'none' : ''; }
+
+  function renderEnvPanel() {
+    $('#presets').innerHTML = Object.keys(ECO.PRESETS).map(function (k) {
+      var P = ECO.PRESETS[k], on = state.env.mode === 'preset' && state.env.preset === k;
+      return '<button class="preset" data-preset="' + k + '" aria-pressed="' + on + '"><div class="sw" style="background:linear-gradient(' +
+        P.sky[0] + ',' + P.sky[1] + ' 55%,' + P.ground + ' 56%)"></div><span>' + esc(P.name) + '</span></button>';
+    }).join('');
+    var e = state.env, has = e.photoKey && state.images[e.photoKey], on = e.mode === 'photo' && has, pc = $('#photo-card');
+    pc.classList.toggle('on', !!on);
+    pc.innerHTML = has
+      ? '<img alt="Your 360° photo" src="' + state.images[e.photoKey] + '">' +
+        (on ? '' : '<button id="b-use-photo" style="width:100%;margin-bottom:6px">Use this photo</button>') +
+        '<button id="b-photo" style="width:100%">Replace photo</button>' +
+        (on ? '<label>Turn the photo <span class="opt">(line up where you start)</span></label><input type="range" id="p-yaw" min="-180" max="180" step="1" value="' + (e.photoYaw || 0) + '">' +
+          '<label class="check"><input type="checkbox" id="p-ground"' + (e.showGround ? ' checked' : '') + '> Add a solid ground</label>' +
+          (e.showGround ? '<label>Ground color</label><input type="color" id="p-gcol" value="' + (e.groundColor || '#6f7f5a') + '">' : '') : '')
+      : '<p class="muted small" style="margin:0 0 8px">Upload an equirectangular (2:1) 360° photo, like those from a 360 camera or a phone\'s panorama mode. Your organisms will stand inside it.</p>' +
+        '<button id="b-photo" style="width:100%">Upload a 360° photo</button>';
+  }
+
+  function renderLibrary() {
+    $('#lib-cats').innerHTML = CATS.map(function (c) { return '<button data-cat="' + c[0] + '" aria-pressed="' + (!libQuery && libTab === c[0]) + '">' + c[1] + '</button>'; }).join('');
+    var q = libQuery.trim().toLowerCase();
+    var items = LIB.filter(function (i) { return q ? i.n.toLowerCase().indexOf(q) >= 0 : i.c === libTab; });
+    $('#lib-grid').innerHTML = items.map(function (i) {
+      return '<button data-i="' + LIB.indexOf(i) + '" title="Add ' + esc(i.n) + '">' + (i.svg ? '<img class="emo-img" alt="" src="' + svgUrl(i.svg) + '">' : '<span class="emo" aria-hidden="true">' + i.e + '</span>') + '<span>' + esc(i.n) + '</span></button>';
+    }).join('') || '<p class="muted small" style="grid-column:1/-1">No matches. Try another word, or upload your own image below.</p>';
+  }
+
+  function renderList() {
+    $('#org-count').textContent = state.organisms.length ? '(' + state.organisms.length + ')' : '';
+    $('#show-roles').checked = !!state.showRoles;
+    $('#org-list').innerHTML = state.organisms.length ? state.organisms.map(function (o) {
+      var r = ECO.role(o.role);
+      return '<button data-id="' + o.id + '" class="' + (o.id === sel ? 'on' : '') + '"><img alt="" src="' + (state.images[o.img] || '') + '"><span class="nm">' +
+        esc(o.name || 'Unnamed') + '</span>' + (r[2] ? '<span class="dot" title="' + esc(r[1]) + '" style="background:' + r[2] + '"></span>' : '') + '</button>';
+    }).join('') : '<p class="muted small">Nothing yet. Click a plant or animal above.</p>';
+  }
+
+  var H_MIN = 0.05, H_MAX = 20;
+  function hToSlider(h) { return Math.round(100 * Math.log(h / H_MIN) / Math.log(H_MAX / H_MIN)); }
+  function sliderToH(v) { var h = H_MIN * Math.pow(H_MAX / H_MIN, v / 100); return h < 1 ? +h.toFixed(2) : +h.toFixed(1); }
+  function fmtM(m) { return m < 1 ? Math.round(m * 100) + ' cm' : m.toFixed(1) + ' m'; }
+
+  function renderInfo() {
+    var box = $('#inspector');
+    box.innerHTML =
+      '<h2>About this ecosystem</h2>' +
+      '<label for="i-title">Title</label><input type="text" id="i-title" placeholder="e.g. Life in a Texas Cross Timbers Forest">' +
+      '<label for="i-author">Created by</label><input type="text" id="i-author" placeholder="Your name">' +
+      '<label for="i-desc">Description <span class="opt">(shown when the ecosystem opens)</span></label>' +
+      '<textarea id="i-desc" rows="6" placeholder="Where is this ecosystem? What is its climate like? What should visitors look for?"></textarea>' +
+      '<div class="tip"><b>Building tips</b><ul>' +
+      '<li>Click an organism to open its pop-up. That is where you name it, explain it, and set its size.</li>' +
+      '<li>Drag organisms in the scene or on the map to place them anywhere.</li>' +
+      '<li>Raise birds, bats, and fish off the ground with <i>Height above ground</i>.</li>' +
+      '<li>Use <b>Preview in VR</b> to see exactly what visitors will see.</li>' +
+      '<li>Your work saves in this browser, but <b>Download ecosystem</b> is your real save file. Reopen it any time with <b>Open saved ecosystem</b>.</li></ul></div>';
+    $('#i-title').value = state.title; $('#i-author').value = state.author; $('#i-desc').value = state.description;
+    $('#i-title').oninput = function (e) { state.title = e.target.value; scheduleSave(); };
+    $('#i-author').oninput = function (e) { state.author = e.target.value; scheduleSave(); };
+    $('#i-desc').oninput = function (e) { state.description = e.target.value; scheduleSave(); };
+  }
+
+  function renderPopup() {
+    var box = $('#popup'), o = sel && byId(sel);
+    if (!o) { box.hidden = true; box.innerHTML = ''; box.dataset.id = ''; return; }
+    if (box.dataset.id === o.id) return;
+    box.dataset.id = o.id;
+    box.innerHTML =
+      '<div class="insp-head"><img alt="" src="' + (state.images[o.img] || '') + '"><input type="text" id="f-name" aria-label="Common name" placeholder="Common name"><button id="b-desel" class="icon" aria-label="Close">✕</button></div>' +
+      '<label for="f-sci">Scientific name <span class="opt">(optional)</span></label><input type="text" id="f-sci" placeholder="e.g. Odocoileus virginianus">' +
+      '<label for="f-role">Role in the ecosystem</label><select id="f-role">' +
+      ECO.ROLES.map(function (r) { return '<option value="' + r[0] + '">' + esc(r[1]) + '</option>'; }).join('') + '</select>' +
+      '<label for="f-note">Annotation</label><textarea id="f-note" rows="5" placeholder="What role does this organism play? What adaptations help it survive here? What does it eat, and what eats it?"></textarea>' +
+      '<div class="row"><label for="f-h">Size (height)</label><output id="o-h"></output></div><input type="range" id="f-h" min="0" max="100" step="1">' +
+      '<div class="row"><label for="f-e">Height above ground</label><output id="o-e"></output></div><input type="range" id="f-e" min="0" max="25" step="0.1">' +
+      '<label class="check"><input type="checkbox" id="f-flip"> Flip to face the other way</label>' +
+      '<div class="btns"><button id="b-dup">Duplicate</button><button id="b-del" class="danger">Delete</button></div>';
+    $('#f-name').value = o.name; $('#f-sci').value = o.sci || ''; $('#f-role').value = o.role || '';
+    $('#f-note').value = o.note || ''; $('#f-h').value = hToSlider(o.h); $('#f-e').value = o.elev || 0; $('#f-flip').checked = !!o.flip;
+    $('#o-h').textContent = fmtM(o.h); $('#o-e').textContent = fmtM(o.elev || 0);
+    function upd() { sync(o); scheduleSave(); }
+    $('#f-name').oninput = function (e) { o.name = e.target.value; upd(); renderList(); };
+    $('#f-sci').oninput = function (e) { o.sci = e.target.value; scheduleSave(); };
+    $('#f-role').onchange = function (e) { o.role = e.target.value; upd(); renderList(); };
+    $('#f-note').oninput = function (e) { o.note = e.target.value; scheduleSave(); };
+    $('#f-h').oninput = function (e) { o.h = sliderToH(+e.target.value); $('#o-h').textContent = fmtM(o.h); upd(); };
+    $('#f-e').oninput = function (e) { o.elev = +e.target.value; $('#o-e').textContent = fmtM(o.elev); upd(); };
+    $('#f-flip').onchange = function (e) { o.flip = e.target.checked; upd(); };
+    $('#b-desel').onclick = function () { select(null); };
+    $('#b-del').onclick = function () { removeOrganism(o.id); };
+    $('#b-dup').onclick = function () {
+      var c = JSON.parse(JSON.stringify(o)); c.id = uid(); c.x = +(o.x + 1.2).toFixed(2); c.z = +(o.z + 0.8).toFixed(2);
+      state.organisms.push(c); sel = c.id; state.organisms.forEach(sync); renderAll(); scheduleSave();
+    };
+    box.hidden = false;
+  }
+
+  // Keep the pop-up beside its organism as the view or the organism moves
+  var popV = new THREE.Vector3(), popB = new THREE.Vector3();
+  function placePopup() {
+    requestAnimationFrame(placePopup);
+    var o = sel && byId(sel), box = $('#popup'), behind = $('#behind'), cam = sceneEl.camera;
+    if (!o || !cam || !box.innerHTML) { box.hidden = true; behind.hidden = true; return; }
+    var y0 = o.elev || 0;
+    popV.set(o.x, y0 + o.h, o.z).applyMatrix4(cam.matrixWorldInverse);
+    popB.set(o.x, y0, o.z).applyMatrix4(cam.matrixWorldInverse);
+    if (popV.z > -0.2 && popB.z > -0.2) { box.hidden = true; behind.hidden = false; return; }
+    behind.hidden = true; box.hidden = false;
+    popV.set(o.x, y0 + o.h, o.z).project(cam); popB.set(o.x, y0, o.z).project(cam);
+    var W = stage.clientWidth, H = stage.clientHeight;
+    var tx = (popV.x + 1) / 2 * W, ty = (1 - popV.y) / 2 * H, by = (1 - popB.y) / 2 * H;
+    var half = Math.max(8, by - ty) * o.aspect / 2, pw = box.offsetWidth, ph = box.offsetHeight;
+    var left = tx + half + 16;
+    if (left + pw > W - 8) left = tx - half - 16 - pw;
+    left = Math.max(8, Math.min(W - pw - 8, left));
+    var top = Math.max(8, Math.min(H - ph - 8, ty));
+    box.style.transform = 'translate(' + Math.round(left) + 'px,' + Math.round(top) + 'px)';
+  }
+  function turnToSelected() {
+    var o = sel && byId(sel), lc = camEl.components['look-controls']; if (!o || !lc) return;
+    var p = new THREE.Vector3(); camEl.object3D.getWorldPosition(p);
+    lc.yawObject.rotation.y = Math.atan2(-(o.x - p.x), -(o.z - p.z)); lc.pitchObject.rotation.x = 0;
+  }
+
+  // ---------- UI wiring ----------
+  document.addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) setTimeout(function () { b.blur(); }, 0); });
+  document.querySelectorAll('.tabs button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.tabs button').forEach(function (x) { x.setAttribute('aria-selected', x === b); });
+      document.querySelectorAll('.pane').forEach(function (p) { p.classList.toggle('on', p.id === 'pane-' + b.dataset.tab); });
+    });
+  });
+  $('#presets').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-preset]'); if (!b) return;
+    state.env.mode = 'preset'; state.env.preset = b.dataset.preset; rebuildEnv();
+  });
+  $('#photo-card').addEventListener('click', function (e) {
+    if (e.target.id === 'b-photo') $('#f-photo').click();
+    if (e.target.id === 'b-use-photo') { state.env.mode = 'photo'; rebuildEnv(); }
+  });
+  $('#photo-card').addEventListener('input', function (e) {
+    if (e.target.id === 'p-yaw') { state.env.photoYaw = +e.target.value; var sky = sceneEl.object3D.getObjectByName('eco-env').children[0]; sky.rotation.y = THREE.MathUtils.degToRad(state.env.photoYaw); scheduleSave(); }
+    if (e.target.id === 'p-gcol') { state.env.groundColor = e.target.value; ECO.buildEnvironment(sceneEl, state.env); scheduleSave(); }
+  });
+  $('#photo-card').addEventListener('change', function (e) { if (e.target.id === 'p-ground') { state.env.showGround = e.target.checked; rebuildEnv(); } });
+
+  $('#f-photo').addEventListener('change', function (e) {
+    var f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    loadImageFile(f).then(function (img) {
+      var ratio = img.naturalWidth / img.naturalHeight;
+      var w = Math.min(4096, img.naturalWidth), h = Math.round(w / 2);
+      var c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      if (state.env.photoKey) { delete state.images[state.env.photoKey]; delete ECO._tex[state.env.photoKey]; }
+      var key = 'sky' + uid(); state.images[key] = c.toDataURL('image/jpeg', 0.85);
+      state.env.photoKey = key; state.env.mode = 'photo'; state.env.photoYaw = 0;
+      rebuildEnv();
+      toast(Math.abs(ratio - 2) > 0.15 ? 'Added. This photo is not 2:1, so it may look stretched. A true 360° photo works best.' : '360° photo added.');
+    }).catch(function () { toast('That image could not be opened. Try a JPG or PNG.'); });
+  });
+
+  $('#lib-cats').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-cat]'); if (!b) return;
+    libTab = b.dataset.cat; libQuery = ''; $('#lib-search').value = ''; renderLibrary();
+  });
+  $('#lib-search').addEventListener('input', function (e) { libQuery = e.target.value; renderLibrary(); });
+  $('#lib-grid').addEventListener('click', function (e) { var b = e.target.closest('[data-i]'); if (b) addFromLibrary(LIB[+b.dataset.i]); });
+  $('#org-list').addEventListener('click', function (e) { var b = e.target.closest('[data-id]'); if (b) select(b.dataset.id); });
+  $('#show-roles').addEventListener('change', function (e) { state.showRoles = e.target.checked; state.organisms.forEach(sync); scheduleSave(); });
+
+  $('#b-upload-org').addEventListener('click', function () { $('#f-org').click(); });
+  $('#f-org').addEventListener('change', function (e) {
+    var f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    loadImageFile(f).then(function (img) {
+      var s = Math.min(1, 512 / Math.max(img.naturalWidth, img.naturalHeight));
+      var c = document.createElement('canvas'); c.width = Math.max(1, Math.round(img.naturalWidth * s)); c.height = Math.max(1, Math.round(img.naturalHeight * s));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      if ($('#rm-bg').checked) removeBackground(c);
+      var t = trim(c) || { canvas: c, aspect: c.width / c.height };
+      var key = 'u' + uid(); state.images[key] = encode(t.canvas);
+      var name = f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() || 'My organism';
+      addOrganism({ name: name.charAt(0).toUpperCase() + name.slice(1), key: key, aspect: t.aspect, h: 1.5, elev: 0, role: '' });
+      toast('Image added. Give it a name and set its size on the right.');
+    }).catch(function () { toast('That image could not be opened. Try a JPG or PNG.'); });
+  });
+
+  $('#b-center').addEventListener('click', function () { camEl.setAttribute('position', { x: 0, y: 1.6, z: 0 }); });
+
+  document.addEventListener('keydown', function (e) {
+    if (document.activeElement !== document.body) return;
+    if ((e.key === 'Delete' || e.key === 'Backspace') && sel) { e.preventDefault(); removeOrganism(sel); }
+    if (e.key === 'Escape') select(null);
+  });
+
+  // ---------- drag organisms in the 3D view ----------
+  var stage = $('#stage'), ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), drag = null, downPt = null, hitV = new THREE.Vector3();
+  function pt(e) { var t = e.changedTouches ? e.changedTouches[0] : e; return { x: t.clientX, y: t.clientY }; }
+  function setRay(p) { var r = sceneEl.canvas.getBoundingClientRect(); ndc.set(((p.x - r.left) / r.width) * 2 - 1, -((p.y - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, sceneEl.camera); }
+  function onDown(e) {
+    if (!sceneEl.canvas || e.target !== sceneEl.canvas || (e.button && e.button > 0)) return;
+    var p = pt(e); setRay(p);
+    var objs = [];
+    ents.forEach(function (el) { var c = el.components['eco-sprite']; if (c) { objs.push(c.mesh); if (c.labelMesh) objs.push(c.labelMesh); } });
+    var hit = ray.intersectObjects(objs, false)[0];
+    if (hit) {
+      var org = byId(hit.object.userData.el.dataset.id); if (!org) return;
+      e.stopPropagation(); if (e.cancelable) e.preventDefault();
+      select(org.id);
+      drag = { org: org, plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), -hit.point.y), off: { x: org.x - hit.point.x, z: org.z - hit.point.z } };
+      stage.classList.add('dragging');
+    } else downPt = p;
+  }
+  function onMove(e) {
+    if (!drag) return;
+    if (e.cancelable) e.preventDefault();
+    setRay(pt(e));
+    if (ray.ray.intersectPlane(drag.plane, hitV)) {
+      var x = hitV.x + drag.off.x, z = hitV.z + drag.off.z, r = Math.hypot(x, z);
+      if (r > 75) { x *= 75 / r; z *= 75 / r; }
+      drag.org.x = +x.toFixed(2); drag.org.z = +z.toFixed(2);
+      ents.get(drag.org.id).setAttribute('position', { x: drag.org.x, y: 0, z: drag.org.z });
+    }
+  }
+  function onUp(e) {
+    if (drag) { drag = null; stage.classList.remove('dragging'); scheduleSave(); return; }
+    if (downPt) { var p = pt(e); if (Math.hypot(p.x - downPt.x, p.y - downPt.y) < 5) select(null); downPt = null; }
+  }
+  stage.addEventListener('mousedown', onDown, true);
+  stage.addEventListener('touchstart', onDown, { capture: true, passive: false });
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('touchmove', onMove, { passive: false });
+  window.addEventListener('mouseup', onUp);
+  window.addEventListener('touchend', onUp);
+
+  // ---------- top-down map ----------
+  var mapC = $('#map'), mctx = mapC.getContext('2d'), ranges = [10, 20, 30, 50, 80], rIdx = 2, mapDrag = null;
+  function R() { return ranges[rIdx]; }
+  function toMap(x, z) { var S = mapC.width, k = (S / 2 - 14) / R(); return [S / 2 + x * k, S / 2 + z * k]; }
+  function fromMap(mx, my) { var S = mapC.width, k = (S / 2 - 14) / R(); return [(mx - S / 2) / k, (my - S / 2) / k]; }
+  function drawMap() {
+    var S = mapC.width, x = mctx;
+    x.clearRect(0, 0, S, S);
+    x.fillStyle = state.env.mode === 'photo' ? '#e8ecef' : (ECO.PRESETS[state.env.preset] || ECO.PRESETS.forest).ground;
+    x.globalAlpha = 0.35; x.beginPath(); x.arc(S / 2, S / 2, S / 2 - 4, 0, 7); x.fill(); x.globalAlpha = 1;
+    x.strokeStyle = 'rgba(0,0,0,.12)'; x.lineWidth = 2;
+    for (var i = 1; i <= 3; i++) { x.beginPath(); x.arc(S / 2, S / 2, (S / 2 - 14) * i / 3, 0, 7); x.stroke(); }
+    x.fillStyle = 'rgba(0,0,0,.45)'; x.font = '600 20px system-ui,sans-serif'; x.textAlign = 'center';
+    x.fillText(R() + ' m', S / 2, 26);
+    state.organisms.forEach(function (o) {
+      var p = toMap(o.x, o.z), on = o.id === sel, sz = on ? 40 : 30, im = getImg(o.img);
+      if (Math.hypot(p[0] - S / 2, p[1] - S / 2) > S / 2) return;
+      if (on) { x.fillStyle = '#2fc4f2'; x.beginPath(); x.arc(p[0], p[1], sz * 0.65, 0, 7); x.fill(); }
+      var r = ECO.role(o.role)[2];
+      if (state.showRoles && r && !on) { x.fillStyle = r; x.beginPath(); x.arc(p[0], p[1], sz * 0.55, 0, 7); x.fill(); }
+      if (im && im.complete && im.naturalWidth) {
+        var a = im.naturalWidth / im.naturalHeight, w = a > 1 ? sz : sz * a, h = a > 1 ? sz / a : sz;
+        x.drawImage(im, p[0] - w / 2, p[1] - h / 2, w, h);
+      }
+    });
+    if (sceneEl.camera) {
+      var cp = new THREE.Vector3(), cd = new THREE.Vector3();
+      sceneEl.camera.getWorldPosition(cp); sceneEl.camera.getWorldDirection(cd);
+      var c = toMap(cp.x, cp.z), ang = Math.atan2(cd.z, cd.x);
+      x.fillStyle = 'rgba(47,196,242,.25)'; x.beginPath(); x.moveTo(c[0], c[1]); x.arc(c[0], c[1], 46, ang - 0.6, ang + 0.6); x.closePath(); x.fill();
+      x.fillStyle = '#ffffff'; x.strokeStyle = '#1e3a2c'; x.lineWidth = 4; x.beginPath(); x.arc(c[0], c[1], 8, 0, 7); x.fill(); x.stroke();
+    }
+  }
+  function mapPt(e) { var r = mapC.getBoundingClientRect(); return [(e.clientX - r.left) * mapC.width / r.width, (e.clientY - r.top) * mapC.height / r.height]; }
+  mapC.addEventListener('pointerdown', function (e) {
+    var p = mapPt(e), best = null, bd = 28;
+    state.organisms.forEach(function (o) { var q = toMap(o.x, o.z), d = Math.hypot(q[0] - p[0], q[1] - p[1]); if (d < bd) { bd = d; best = o; } });
+    if (best) { mapDrag = best; select(best.id); mapC.setPointerCapture(e.pointerId); mapC.style.cursor = 'grabbing'; }
+  });
+  mapC.addEventListener('pointermove', function (e) {
+    if (!mapDrag) return;
+    var w = fromMap.apply(null, mapPt(e)), r = Math.hypot(w[0], w[1]);
+    if (r > 75) { w[0] *= 75 / r; w[1] *= 75 / r; }
+    mapDrag.x = +w[0].toFixed(2); mapDrag.z = +w[1].toFixed(2);
+    ents.get(mapDrag.id).setAttribute('position', { x: mapDrag.x, y: 0, z: mapDrag.z });
+  });
+  function endMap() { if (mapDrag) { mapDrag = null; mapC.style.cursor = ''; scheduleSave(); } }
+  mapC.addEventListener('pointerup', endMap); mapC.addEventListener('pointercancel', endMap);
+  $('#z-in').addEventListener('click', function () { rIdx = Math.max(0, rIdx - 1); });
+  $('#z-out').addEventListener('click', function () { rIdx = Math.min(ranges.length - 1, rIdx + 1); });
+  setInterval(drawMap, 100);
+  $('#behind').addEventListener('click', turnToSelected);
+  requestAnimationFrame(placePopup);
+
+  // ---------- export / open ----------
+  function exportData() {
+    var used = {};
+    state.organisms.forEach(function (o) { used[o.img] = 1; });
+    if (state.env.mode === 'photo' && state.env.photoKey) used[state.env.photoKey] = 1;
+    var images = {}; Object.keys(used).forEach(function (k) { if (state.images[k]) images[k] = state.images[k]; });
+    var d = JSON.parse(JSON.stringify(state)); d.images = images;
+    d.title = (state.title || '').trim() || 'Untitled ecosystem';
+    d.savedWith = 'Ecosystem Builder'; d.savedAt = new Date().toISOString();
+    return d;
+  }
+  function viewerHTML() {
+    var d = exportData();
+    var json = JSON.stringify(d).replace(/</g, '\\u003c');
+    return '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
+      '<title>' + esc(d.title) + '</title>\n' +
+      '<script src="https://cdn.jsdelivr.net/npm/aframe@1.7.1/dist/aframe-v1.7.1.min.js"><\/script>\n' +
+      '<script>' + $('#eco-shared').textContent + '<\/script>\n' +
+      '<script>' + $('#eco-viewer-js').textContent + '<\/script>\n' +
+      '<style>' + $('#eco-viewer-css').textContent + '</style>\n</head>\n<body>\n' +
+      $('#eco-viewer-body').textContent +
+      '\n<script type="application/json" id="eco-data">' + json + '<\/script>\n</body>\n</html>\n';
+  }
+  function slug(s) { return (s || 'ecosystem').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50) || 'ecosystem'; }
+
+  $('#b-download').addEventListener('click', function () {
+    if (!state.organisms.length) { toast('Add at least one organism before downloading.'); return; }
+    var blob = new Blob([viewerHTML()], { type: 'text/html' }), a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = slug(state.title) + '-ecosystem.html';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+    toast(state.title.trim() ? 'Downloaded. This file is your ecosystem and your save file.' : 'Downloaded. Tip: give your ecosystem a title on the right.');
+  });
+  $('#b-preview').addEventListener('click', function () {
+    var w = window.open(URL.createObjectURL(new Blob([viewerHTML()], { type: 'text/html' })), '_blank');
+    if (!w) toast('Your browser blocked the preview window. Allow pop-ups for this page and try again.');
+  });
+  $('#b-open').addEventListener('click', function () { $('#f-open').click(); });
+  $('#f-open').addEventListener('change', function (e) {
+    var f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    f.text().then(function (txt) {
+      var node = new DOMParser().parseFromString(txt, 'text/html').getElementById('eco-data');
+      if (!node) throw new Error('none');
+      var d = JSON.parse(node.textContent);
+      if (!d || !Array.isArray(d.organisms)) throw new Error('bad');
+      var b = blankState(); delete d.savedWith; delete d.savedAt;
+      state = Object.assign(b, d); state.env = Object.assign(blankState().env, d.env || {}); state.images = d.images || {};
+      rebuildAll(); scheduleSave();
+      toast('Opened “' + (state.title || 'ecosystem') + '”.');
+    }).catch(function () { toast('That file is not an ecosystem made with this builder.'); });
+  });
+  $('#b-new').addEventListener('click', function () {
+    if (state.organisms.length && !confirm('Start a new ecosystem? Anything you have not downloaded will be lost.')) return;
+    state = blankState(); rebuildAll(); scheduleSave();
+  });
+
+  // ---------- start ----------
+  function start() {
+    DB.get('current').then(function (saved) {
+      if (saved && Array.isArray(saved.organisms)) {
+        state = Object.assign(blankState(), saved); state.env = Object.assign(blankState().env, saved.env || {}); state.images = saved.images || {};
+        if (saved.organisms.length) toast('Welcome back. Your last ecosystem was restored from this browser.');
+      }
+      rebuildAll();
+    });
+  }
+  if (sceneEl.hasLoaded) start(); else sceneEl.addEventListener('loaded', start);
+})();
+</script>
+</body>
+</html>
